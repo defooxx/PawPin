@@ -1,4 +1,5 @@
 import knex from "knex";
+import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { config } from "./config.js";
@@ -12,6 +13,10 @@ const databaseUrl = process.env.DATABASE_URL?.trim();
 const databaseSsl = process.env.DATABASE_SSL === "true"
   || /[?&]sslmode=require(?:&|$)/i.test(databaseUrl || "");
 
+if (!databaseUrl) {
+  fs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+}
+
 const db = knex(databaseUrl ? {
   client: "pg",
   connection: {
@@ -24,4 +29,5 @@ const db = knex(databaseUrl ? {
   useNullAsDefault: true,
 });
 
+export const databaseMode = databaseUrl ? "postgresql" : "sqlite";
 export default db;

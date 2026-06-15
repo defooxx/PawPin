@@ -4,7 +4,7 @@ import cors from "cors";
 import crypto from "crypto";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
-import db from "./db.js";
+import db, { databaseMode } from "./db.js";
 import { config } from "./config.js";
 import { optionalAuth } from "./auth.js";
 import foundationRouter, { ensureFoundationSchema } from "./foundation.js";
@@ -373,9 +373,9 @@ ensureSchema()
   .then(ensureFoundationSchema)
   .then(ensureFeaturesSchema)
   .then(() => app.listen(config.port, '0.0.0.0', () => {
-    console.log(`PawPin backend listening on port ${config.port}`);
+    console.log(`PawPin backend listening on port ${config.port} using ${databaseMode}`);
   }))
   .catch((err) => {
-    console.error("Schema initialization failed:", err.message);
+    console.error(`Schema initialization failed using ${databaseMode}:`, err.message);
     process.exit(1);
   });

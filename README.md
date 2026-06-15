@@ -43,6 +43,16 @@ across ordinary Railway deployments unless a volume is mounted.
 Keep `DATABASE_SSL=false` for Railway's private PostgreSQL URL. Set it to
 `true` only when using an external database provider that requires SSL.
 
+In the PawPin service's **Variables** tab, add a reference variable:
+
+```text
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+```
+
+The exact `Postgres` name must match the name of your Railway PostgreSQL
+service. Merely adding a PostgreSQL service does not always expose its
+connection URL to the PawPin service.
+
 Add these required variables to the Railway backend service:
 
 ```text
