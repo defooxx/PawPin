@@ -1,15 +1,19 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Building2, Check, FileCheck2, LogOut, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, Check, FileCheck2, KeyRound, LogOut, MailCheck, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import {
   getApplications,
   googleLogin,
   login,
   register,
+  requestPasswordReset,
+  resendVerification,
+  resetPassword,
   reviewApplication,
   submitApplication,
   updateProfile,
   uploadApplicationDocument,
+  verifyEmail,
 } from "../services/auth.js";
 import { fade } from "../data.js";
 
@@ -19,17 +23,48 @@ function Field({ label, ...props }) {
 
 function AuthForm({ onAuthenticated, toast }) {
   const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({ name: "", email: "", password: "", location: "" });
+  const [form, setForm] = useState({
+    name: "", email: "", password: "", confirmPassword: "", location: "", accountType: "user",
+    acceptTerms: false, acceptPrivacy: false, locationConsent: "ask", token: "",
+  });
   const [loading, setLoading] = useState(false);
   const change = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const check = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.checked }));
+  const passwordChecks = [
+    ["10+ characters", form.password.length >= 10],
+    ["A letter", /[A-Za-z]/.test(form.password)],
+    ["A number", /\d/.test(form.password)],
+    ["Passwords match", Boolean(form.password) && form.password === form.confirmPassword],
+  ];
 
   const submit = async (event) => {
     event.preventDefault();
     setLoading(true);
     try {
-      const session = mode === "login" ? await login(form) : await register(form);
-      onAuthenticated(session.user);
-      toast(`Welcome${session.user.name ? `, ${session.user.name}` : ""}`);
+      if (mode === "verify") {
+        const session = await verifyEmail(form.token);
+        onAuthenticated(session.user);
+        toast("Email verified. Welcome to PawPin.");
+      } else if (mode === "forgot") {
+        const result = await requestPasswordReset(form.email);
+        setForm((current) => ({ ...current, token: result.developmentResetToken || "" }));
+        setMode("reset");
+        toast(result.message);
+      } else if (mode === "reset") {
+        await resetPassword({ token: form.token, password: form.password, confirmPassword: form.confirmPassword });
+        setMode("login");
+        toast("Password updated. Sign in with your new password.");
+      } else {
+        const session = mode === "login" ? await login(form) : await register(form);
+        if (session.verificationRequired) {
+          setForm((current) => ({ ...current, token: session.developmentVerificationToken || "" }));
+          setMode("verify");
+          toast("Account created. Verify your email to continue.");
+        } else {
+          onAuthenticated(session.user);
+          toast(`Welcome${session.user.name ? `, ${session.user.name}` : ""}`);
+        }
+      }
     } catch (error) {
       toast(error.message);
     } finally {
@@ -47,6 +82,45 @@ function AuthForm({ onAuthenticated, toast }) {
     }
   };
 
+  const resend = async () => {
+    setLoading(true);
+    try {
+      const result = await resendVerification(form.email);
+      setForm((current) => ({ ...current, token: result.developmentVerificationToken || current.token }));
+      toast(result.message);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (mode === "verify") {
+    return (
+      <form onSubmit={submit} style={fade}>
+        <div className="pp-account-hero"><MailCheck size={34} color="var(--sage)" /><h1 className="pp-h1">Verify your email</h1><p className="pp-sub">Enter the one-time token sent for {form.email}.</p></div>
+        <Field label="Verification token" value={form.token} onChange={change("token")} required />
+        <button className="pp-btn pp-btn-amber" disabled={loading}>Verify email</button>
+        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={resend} disabled={loading}>Send a new token</button>
+      </form>
+    );
+  }
+
+  if (mode === "forgot" || mode === "reset") {
+    return (
+      <form onSubmit={submit} style={fade}>
+        <div className="pp-account-hero"><KeyRound size={34} color="var(--amber-deep)" /><h1 className="pp-h1">{mode === "forgot" ? "Reset your password" : "Choose a new password"}</h1></div>
+        {mode === "forgot" ? <Field label="Email" type="email" value={form.email} onChange={change("email")} required /> : <>
+          <Field label="Reset token" value={form.token} onChange={change("token")} required />
+          <Field label="New password" type="password" value={form.password} onChange={change("password")} required />
+          <Field label="Confirm password" type="password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
+        </>}
+        <button className="pp-btn pp-btn-amber" disabled={loading}>{mode === "forgot" ? "Continue" : "Update password"}</button>
+        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => setMode("login")}>Back to sign in</button>
+      </form>
+    );
+  }
+
   return (
     <form onSubmit={submit} style={fade}>
       <div className="pp-account-hero">
@@ -54,23 +128,39 @@ function AuthForm({ onAuthenticated, toast }) {
         <h1 className="pp-h1">{mode === "login" ? "Welcome back" : "Join PawPin"}</h1>
         <p className="pp-sub">{mode === "login" ? "Sign in to see your reports and profile." : "Create a profile to build your rescue history."}</p>
       </div>
-      {mode === "register" && <Field label="Name" value={form.name} onChange={change("name")} required />}
+      {mode === "register" && <>
+        <p className="pp-field">I am joining as</p>
+        <div className="pp-role-grid">
+          {[["user", UserRound, "Individual"], ["shelter", Building2, "Shelter"], ["vet", Stethoscope, "Veterinarian"]].map(([type, Icon, label]) => (
+            <button type="button" key={type} className={"pp-role-choice" + (form.accountType === type ? " on" : "")} onClick={() => setForm((current) => ({ ...current, accountType: type }))}><Icon size={18} />{label}</button>
+          ))}
+        </div>
+        <Field label="Name" value={form.name} onChange={change("name")} required />
+      </>}
       <Field label="Email" type="email" value={form.email} onChange={change("email")} required />
       <Field label="Password" type="password" value={form.password} onChange={change("password")} minLength={10} required />
-      {mode === "register" && <Field label="Location" value={form.location} onChange={change("location")} placeholder="City or neighbourhood" />}
+      {mode === "register" && <>
+        <Field label="Confirm password" type="password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
+        <div className="pp-password-checks">{passwordChecks.map(([label, valid]) => <span className={valid ? "ok" : ""} key={label}><Check size={12} />{label}</span>)}</div>
+        <Field label="Location (optional)" value={form.location} onChange={change("location")} placeholder="City or neighbourhood" />
+        <label className="pp-field">Location preference<select value={form.locationConsent} onChange={change("locationConsent")}><option value="ask">Ask every time</option><option value="once">Allow once when requested</option><option value="while_using">Allow while using PawPin</option></select></label>
+        <label className="pp-check"><input type="checkbox" checked={form.acceptTerms} onChange={check("acceptTerms")} /> I accept the Terms of Service.</label>
+        <label className="pp-check"><input type="checkbox" checked={form.acceptPrivacy} onChange={check("acceptPrivacy")} /> I accept the Privacy Policy and understand location is only used with permission.</label>
+      </>}
       <button className="pp-btn pp-btn-amber" disabled={loading}>{loading ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}</button>
+      {mode === "login" && <button type="button" className="pp-link" style={{ width: "100%", marginTop: 12 }} onClick={() => setMode("forgot")}>Forgot password?</button>}
       <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => setMode(mode === "login" ? "register" : "login")}>
         {mode === "login" ? "Need an account? Register" : "Already registered? Sign in"}
       </button>
       {import.meta.env.VITE_GOOGLE_CLIENT_ID
-        ? <div style={{ display: "grid", placeItems: "center", marginTop: 12 }}><GoogleLogin onSuccess={(response) => finishGoogleLogin(response.credential)} onError={() => toast("Google sign-in failed")} /></div>
+        ? <div style={{ display: "grid", placeItems: "center", marginTop: 12 }}><GoogleLogin onSuccess={(response) => finishGoogleLogin(response.credential)} onError={() => toast("Google sign-in failed")} /><p className="pp-sub" style={{ fontSize: 10.5, textAlign: "center" }}>By continuing with Google, you accept PawPin's Terms and Privacy Policy. Location remains ask-first.</p></div>
         : <p className="pp-sub" style={{ fontSize: 11.5, textAlign: "center", marginTop: 12 }}>Google sign-in becomes available when its client ID is configured.</p>}
     </form>
   );
 }
 
-function ApplicationForm({ refresh, toast }) {
-  const [form, setForm] = useState({ type: "shelter", organizationName: "", registrationNumber: "", address: "", documentUrls: [] });
+function ApplicationForm({ refresh, toast, defaultType = "shelter" }) {
+  const [form, setForm] = useState({ type: defaultType === "vet" ? "vet" : "shelter", organizationName: "", registrationNumber: "", address: "", documentUrls: [] });
   const [loading, setLoading] = useState(false);
   const change = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
@@ -172,6 +262,49 @@ function AdminPanel({ toast }) {
   );
 }
 
+function VerificationNotice({ email, refresh, toast }) {
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(false);
+  const resend = async () => {
+    setLoading(true);
+    try {
+      const result = await resendVerification(email);
+      setToken(result.developmentVerificationToken || "");
+      toast(result.message);
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const confirm = async () => {
+    setLoading(true);
+    try {
+      await verifyEmail(token);
+      toast("Email verified");
+      await refresh();
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <div className="pp-notice">
+      <MailCheck size={19} />
+      <div style={{ flex: 1 }}>
+        <b>Verify your email</b>
+        <p className="pp-sub">Verification is required before shelter or vet review documents can be submitted.</p>
+        <input aria-label="Verification token" placeholder="Verification token" value={token} onChange={(event) => setToken(event.target.value)} />
+        <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
+          <button className="pp-link" onClick={resend} disabled={loading}>Send token</button>
+          <button className="pp-link" onClick={confirm} disabled={loading || !token}>Verify now</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh, toast }) {
   const [profile, setProfile] = useState(data?.user || null);
   useEffect(() => setProfile(data?.user || null), [data]);
@@ -200,6 +333,7 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
         <h1 className="pp-h1">{profile.name}</h1>
         <span className="pp-pill" style={{ background: "var(--sage-soft)", color: "var(--sage)" }}><ShieldCheck size={13} />{profile.role}</span>
       </div>
+      {!profile.emailVerified && <VerificationNotice email={profile.email} refresh={refresh} toast={toast} />}
       <form onSubmit={save}>
         <Field label="Name" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required />
         <Field label="Location" value={profile.location || ""} onChange={(event) => setProfile({ ...profile, location: event.target.value })} />
@@ -213,7 +347,7 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
 
       {data.application
         ? <div className="pp-card" style={{ marginTop: 18 }}><b>{data.application.organizationName}</b><p className="pp-sub">Application status: {data.application.status}</p></div>
-        : profile.role === "user" && <div style={{ marginTop: 18 }}><ApplicationForm refresh={refresh} toast={toast} /></div>}
+        : profile.role === "user" && profile.emailVerified && ["shelter", "vet"].includes(profile.accountType) && <div style={{ marginTop: 18 }}><ApplicationForm refresh={refresh} toast={toast} defaultType={profile.accountType} /></div>}
       {profile.role === "admin" && <AdminPanel toast={toast} />}
     </div>
   );

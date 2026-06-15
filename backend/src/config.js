@@ -14,6 +14,21 @@ function required(name) {
   return value;
 }
 
+const requiredEnvironment = [
+  "REPORTER_HASH_SECRET",
+  "AUTH_JWT_SECRET",
+  "CLOUDINARY_CLOUD_NAME",
+  "CLOUDINARY_API_KEY",
+  "CLOUDINARY_API_SECRET",
+];
+const missingEnvironment = requiredEnvironment.filter((name) => {
+  const value = process.env[name]?.trim();
+  return !value || value.startsWith("your_");
+});
+if (missingEnvironment.length) {
+  throw new Error(`Missing required environment variables: ${missingEnvironment.join(", ")}`);
+}
+
 function positiveInteger(name, fallback) {
   const value = Number.parseInt(process.env[name] || String(fallback), 10);
   if (!Number.isSafeInteger(value) || value <= 0) {
@@ -63,6 +78,8 @@ export const config = Object.freeze({
   shelterApiToken: optional("SHELTER_API_TOKEN"),
   authJwtSecret: required("AUTH_JWT_SECRET"),
   authTokenTtl: process.env.AUTH_TOKEN_TTL?.trim() || "7d",
+  authOneTimeTokenMinutes: positiveInteger("AUTH_ONE_TIME_TOKEN_MINUTES", 30),
+  exposeAuthTokens: boolean("EXPOSE_AUTH_TOKENS", false),
   googleClientId: optional("GOOGLE_CLIENT_ID"),
   adminEmail: optional("ADMIN_EMAIL")?.toLowerCase() || null,
   adminPassword: optional("ADMIN_PASSWORD"),

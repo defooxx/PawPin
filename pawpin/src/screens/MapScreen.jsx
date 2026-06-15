@@ -62,6 +62,7 @@ export function MapScreen({ toast }) {
   const [rescuePins, setRescuePins] = useState([]);
   const [lostPins, setLostPins]   = useState([]);
   const [locating, setLocating]   = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
   const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
   const watchRef = useRef(null);
@@ -73,6 +74,8 @@ export function MapScreen({ toast }) {
     userMarkerRef.current = L.marker(coords, { icon: ICONS.user })
       .bindPopup("<strong>You are here</strong>")
       .addTo(mapRef.current);
+    userMarkerRef.current.openPopup();
+    setUserLocation(location);
     if (animate) mapRef.current.flyTo(coords, 15, { animate: true, duration: 1 });
   };
 
@@ -187,7 +190,7 @@ export function MapScreen({ toast }) {
   };
 
   return (
-    <div style={{ margin: "-16px -16px -22px", display: "flex", flexDirection: "column" }}>
+    <div style={{ margin: "-16px -16px -22px", display: "flex", flexDirection: "column", position: "relative" }}>
 
       {/* Filter bar */}
       <div style={{
@@ -229,6 +232,11 @@ export function MapScreen({ toast }) {
 
       {/* Map container — Leaflet mounts here */}
       <div ref={containerRef} style={{ height: 510 }} />
+      {userLocation && (
+        <div className="pp-location-confirmation">
+          Your location: {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}
+        </div>
+      )}
       <LocationChoiceDialog open={locationChoiceOpen} onClose={() => setLocationChoiceOpen(false)} onChoose={useLocation} />
 
     </div>

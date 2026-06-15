@@ -14,9 +14,11 @@ export function publicUser(user) {
     photoUrl: user.photoUrl,
     location: user.location,
     role: user.role,
+    accountType: user.accountType || "user",
     pointsBalance: user.pointsBalance,
     status: user.status,
     emailVerified: Boolean(user.emailVerified),
+    locationConsent: user.locationConsent || "ask",
     createdAt: user.createdAt,
   };
 }
@@ -66,6 +68,12 @@ export function requireRole(...roles) {
   return (req, res, next) => roles.includes(req.user?.role)
     ? next()
     : res.status(403).json({ error: "You do not have permission for this action" });
+}
+
+export function requireVerifiedEmail(req, res, next) {
+  return req.user?.emailVerified
+    ? next()
+    : res.status(403).json({ error: "Verify your email before continuing" });
 }
 
 export async function verifyGoogleCredential(credential) {

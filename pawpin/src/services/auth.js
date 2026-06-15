@@ -40,6 +40,26 @@ export const googleLogin = (credential) => request("/auth/google", {
   body: JSON.stringify({ credential }),
 }).then(saveSession);
 
+export const verifyEmail = (token) => request("/auth/verify-email", {
+  method: "POST",
+  body: JSON.stringify({ token }),
+}).then(saveSession);
+
+export const resendVerification = (email) => request("/auth/resend-verification", {
+  method: "POST",
+  body: JSON.stringify({ email }),
+});
+
+export const requestPasswordReset = (email) => request("/auth/forgot-password", {
+  method: "POST",
+  body: JSON.stringify({ email }),
+});
+
+export const resetPassword = (details) => request("/auth/reset-password", {
+  method: "POST",
+  body: JSON.stringify(details),
+});
+
 export const getMe = () => request("/me");
 
 export const updateProfile = (details) => request("/me", {

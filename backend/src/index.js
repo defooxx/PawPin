@@ -372,7 +372,7 @@ app.use((error, req, res, next) => {
 ensureSchema()
   .then(ensureFoundationSchema)
   .then(ensureFeaturesSchema)
-  .then(() => app.listen(config.port, () => {
+  .then(() => app.listen(config.port, '0.0.0.0', () => {
     console.log(`PawPin backend listening on port ${config.port}`);
   }))
   .catch((err) => {

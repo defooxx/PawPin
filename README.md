@@ -26,6 +26,39 @@ npm run dev
 
 The backend runs at `http://localhost:4000`.
 
+## Deploy the backend to Railway
+
+This repository contains separate frontend, backend, and iOS projects. For the
+Railway backend service, open **Settings** and set:
+
+- **Root Directory:** `/backend`
+- **Config File Path:** `/backend/railway.json`
+
+The checked-in Railway config installs backend dependencies, starts the Express
+API, and checks `/health` before marking a deployment healthy.
+
+Add a Railway PostgreSQL service and reference its `DATABASE_URL` from the
+backend service. SQLite is suitable locally, but its file will not persist
+across ordinary Railway deployments unless a volume is mounted.
+Keep `DATABASE_SSL=false` for Railway's private PostgreSQL URL. Set it to
+`true` only when using an external database provider that requires SSL.
+
+Add these required variables to the Railway backend service:
+
+```text
+REPORTER_HASH_SECRET=<long random value>
+AUTH_JWT_SECRET=<different long random value>
+CLOUDINARY_CLOUD_NAME=<Cloudinary cloud name>
+CLOUDINARY_API_KEY=<Cloudinary API key>
+CLOUDINARY_API_SECRET=<Cloudinary API secret>
+CORS_ORIGINS=https://your-frontend-domain.example
+EXPOSE_AUTH_TOKENS=false
+```
+
+Do not manually set `PORT`; Railway supplies it. Optional variables and local
+defaults are documented in `backend/.env.example`. After deployment, opening
+`https://your-railway-domain/health` should return `{"status":"ok", ...}`.
+
 ## Foundation: authentication and profiles
 
 The web account button supports email/password registration, JWT sessions,

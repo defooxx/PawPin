@@ -284,14 +284,26 @@ button:disabled { cursor: not-allowed; }
 .pp-avatar { align-items: center; background: var(--amber-soft); border-radius: 50%; color: var(--amber-deep); display: flex; height: 68px; justify-content: center; overflow: hidden; width: 68px; }
 .pp-avatar img { height: 100%; object-fit: cover; width: 100%; }
 .pp-field { color: var(--ink-soft); display: block; font-size: 12px; font-weight: 800; margin-bottom: 11px; }
-.pp-field input { background: var(--bg); border: 1px solid var(--line); border-radius: 13px; color: var(--ink); display: block; margin-top: 5px; outline: none; padding: 12px 13px; width: 100%; }
-.pp-field input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.pp-field input, .pp-field select { background: var(--bg); border: 1px solid var(--line); border-radius: 13px; color: var(--ink); display: block; margin-top: 5px; outline: none; padding: 12px 13px; width: 100%; }
+.pp-field input:focus, .pp-field select:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.pp-role-grid { display: grid; gap: 7px; grid-template-columns: repeat(3, 1fr); margin: -4px 0 14px; }
+.pp-role-choice { align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; color: var(--ink-soft); cursor: pointer; display: flex; flex-direction: column; font-size: 10px; font-weight: 800; gap: 5px; padding: 10px 4px; }
+.pp-role-choice.on { background: var(--amber-soft); border-color: var(--amber); color: var(--amber-deep); }
+.pp-password-checks { display: flex; flex-wrap: wrap; gap: 5px; margin: -4px 0 12px; }
+.pp-password-checks span { align-items: center; background: var(--bg); border-radius: 999px; color: var(--ink-soft); display: flex; font-size: 10px; font-weight: 800; gap: 3px; padding: 4px 7px; }
+.pp-password-checks span.ok { background: var(--sage-soft); color: var(--sage); }
+.pp-check { align-items: flex-start; color: var(--ink-soft); display: flex; font-size: 11px; font-weight: 700; gap: 7px; line-height: 1.35; margin: 9px 0; }
+.pp-check input { accent-color: var(--amber); margin-top: 2px; }
+.pp-notice { align-items: flex-start; background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 16px; color: var(--amber-deep); display: flex; gap: 10px; margin-bottom: 14px; padding: 12px; }
+.pp-notice p { margin: 3px 0 0; }
+.pp-notice input { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); margin-top: 8px; outline: none; padding: 9px 10px; width: 100%; }
 .pp-upload { align-items: center; background: var(--sage-soft); border: 1px dashed var(--sage); border-radius: 14px; color: var(--sage); cursor: pointer; display: flex; font-size: 12.5px; font-weight: 800; gap: 8px; justify-content: center; margin: 12px 0; padding: 13px; }
 .pp-consent-backdrop { align-items: center; background: rgba(42, 29, 22, .56); display: flex; inset: 0; justify-content: center; padding: 18px; position: fixed; z-index: 10000; }
 .pp-consent { background: var(--surface); border-radius: 22px; box-shadow: 0 20px 50px rgba(42, 29, 22, .28); padding: 22px 18px 18px; position: relative; text-align: center; width: min(340px, 100%); }
 .pp-consent .pp-btn + .pp-btn { margin-top: 9px; }
 .pp-consent-close { position: absolute; right: 10px; top: 10px; }
 .pp-location-sharing { color: var(--sage); font-size: 11.5px; font-weight: 800; margin: 7px 0 0; text-align: center; }
+.pp-location-confirmation { background: var(--surface); border: 1px solid var(--sage); border-radius: 14px; bottom: 12px; color: var(--sage); font-size: 11px; font-weight: 800; left: 50%; padding: 7px 11px; position: absolute; transform: translateX(-50%); white-space: nowrap; z-index: 900; }
 
 @keyframes beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }

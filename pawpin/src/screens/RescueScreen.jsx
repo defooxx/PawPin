@@ -54,7 +54,8 @@ function RescueMiniMap({ pin, onPin }) {
     if (!mapRef.current) return;
     if (markerRef.current) { markerRef.current.remove(); markerRef.current = null; }
     if (pin) {
-      markerRef.current = L.marker(pin, { icon: pinIcon }).addTo(mapRef.current);
+      markerRef.current = L.marker(pin, { icon: pinIcon }).bindPopup("<strong>Animal location pinned here</strong>").addTo(mapRef.current);
+      markerRef.current.openPopup();
       mapRef.current.flyTo(pin, 15, { animate: true, duration: 0.8 });
     }
   }, [pin]);
@@ -75,6 +76,7 @@ export function RescueScreen({ toast }) {
   const [pin, setPin]       = useState(null); // [lat, lng]
   const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
+  const [locating, setLocating] = useState(false);
   const fileRef = useRef(null);
   const watchRef = useRef(null);
 
@@ -103,15 +105,18 @@ export function RescueScreen({ toast }) {
   const useLocation = async (mode) => {
     setLocationChoiceOpen(false);
     stopSharing();
+    setLocating(true);
     try {
       if (mode === "share") {
         watchRef.current = watchCurrentLocation(
           (loc) => {
             setPin([loc.latitude, loc.longitude]);
             setSharingLocation(true);
+            setLocating(false);
           },
           (error) => {
             stopSharing();
+            setLocating(false);
             toast(error.message);
           },
         );
@@ -119,9 +124,11 @@ export function RescueScreen({ toast }) {
       }
       const location = await getCurrentLocation();
       setPin([location.latitude, location.longitude]);
-      toast("Location used once");
+      toast("Current location pinned");
     } catch (error) {
       toast(error.message);
+    } finally {
+      if (mode !== "share") setLocating(false);
     }
   };
 
@@ -214,8 +221,8 @@ export function RescueScreen({ toast }) {
           📍 Pin: {pin[0].toFixed(5)}, {pin[1].toFixed(5)}
         </div>
       )}
-      <button className="pp-btn pp-btn-ghost" style={{ marginTop: 10, fontSize: 13.5 }} onClick={() => sharingLocation ? stopSharing() : setLocationChoiceOpen(true)}>
-        <Navigation size={16} /> {sharingLocation ? "Stop sharing location" : "Use my current location"}
+      <button className="pp-btn pp-btn-ghost" disabled={locating} style={{ marginTop: 10, fontSize: 13.5, opacity: locating ? .65 : 1 }} onClick={() => sharingLocation ? stopSharing() : setLocationChoiceOpen(true)}>
+        <Navigation size={16} /> {locating ? "Finding your location..." : sharingLocation ? "Stop sharing location" : "Use my current location"}
       </button>
       {sharingLocation && <p className="pp-location-sharing">Location is updating while this screen is open.</p>}
       <LocationChoiceDialog open={locationChoiceOpen} onClose={() => setLocationChoiceOpen(false)} onChoose={useLocation} />
