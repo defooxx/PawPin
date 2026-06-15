@@ -12,7 +12,10 @@ const databaseUrl = process.env.DATABASE_URL?.trim();
 
 const db = knex(databaseUrl ? {
   client: "pg",
-  connection: databaseUrl,
+  connection: {
+    connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false },
+  },
 } : {
   client: "sqlite3",
   connection: { filename: resolvedPath },
