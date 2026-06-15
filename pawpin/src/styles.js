@@ -1,0 +1,299 @@
+export const APP_STYLES = String.raw`
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap");
+
+:root {
+  --bg: #fff4ea;
+  --surface: #fff;
+  --ink: #3a2a22;
+  --ink-soft: #8a776b;
+  --amber: #f7a833;
+  --amber-deep: #e0860c;
+  --amber-soft: #ffeed2;
+  --sage: #3f9b7e;
+  --sage-soft: #e2f1eb;
+  --coral: #ff7a59;
+  --coral-soft: #ffe5dd;
+  --sky: #5fa9da;
+  --sky-soft: #e2f0fa;
+  --sos: #e5462e;
+  --sos-soft: #fbe0db;
+  --line: #f0e1d2;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body, #root { min-height: 100%; margin: 0; }
+body { min-width: 320px; }
+button, input, textarea, select { font: inherit; }
+button:disabled { cursor: not-allowed; }
+
+.pp-root { color: var(--ink); font-family: "Nunito", system-ui, sans-serif; }
+.pp-fred { font-family: "Fredoka", "Nunito", sans-serif; }
+.pp-stage {
+  align-items: center;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #ffe6cc 0%, transparent 55%),
+    radial-gradient(900px 500px at 110% 10%, #ffe0d6 0%, transparent 50%),
+    var(--bg);
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px 12px;
+  width: 100%;
+}
+.pp-phone {
+  background: var(--surface);
+  border-radius: 42px;
+  box-shadow: 0 30px 70px -20px rgba(58, 42, 34, .45), 0 0 0 10px #2a1d16, 0 0 0 12px #4a352a;
+  display: flex;
+  flex-direction: column;
+  height: 812px;
+  max-height: 94vh;
+  max-width: 392px;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+.pp-header {
+  align-items: center;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 18px 12px;
+  position: relative;
+  z-index: 5;
+}
+.pp-brand { align-items: center; display: flex; gap: 9px; }
+.pp-logo {
+  background: var(--amber);
+  border-radius: 13px;
+  box-shadow: 0 6px 14px -4px rgba(224, 134, 12, .6);
+  display: grid;
+  height: 38px;
+  place-items: center;
+  width: 38px;
+}
+.pp-icobtn {
+  background: var(--bg);
+  border: none;
+  border-radius: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  height: 40px;
+  place-items: center;
+  position: relative;
+  width: 40px;
+}
+.pp-scroll { flex: 1; overflow-x: hidden; overflow-y: auto; padding: 16px 16px 22px; }
+.pp-scroll::-webkit-scrollbar { width: 0; }
+.pp-tabs {
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+}
+.pp-tab {
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  font-family: "Nunito";
+  font-size: 10.5px;
+  font-weight: 700;
+  gap: 3px;
+  padding: 6px 0;
+  transition: color .15s;
+}
+.pp-tab .pp-pawwrap {
+  align-items: center;
+  border-radius: 11px;
+  display: grid;
+  height: 30px;
+  place-items: center;
+  transition: .18s;
+  width: 34px;
+}
+.pp-tab.active { color: var(--amber-deep); }
+.pp-tab.active .pp-pawwrap { background: var(--amber-soft); transform: translateY(-1px); }
+.pp-card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 16px; }
+.pp-h1 { font-family: "Fredoka"; font-size: 23px; font-weight: 600; letter-spacing: -.3px; line-height: 1.1; }
+.pp-h2 { font-family: "Fredoka"; font-size: 17px; font-weight: 600; }
+.pp-sub { color: var(--ink-soft); font-size: 13.5px; line-height: 1.45; }
+.pp-link {
+  background: none;
+  border: none;
+  color: var(--amber-deep);
+  cursor: pointer;
+  font-family: "Nunito";
+  font-size: 13px;
+  font-weight: 800;
+}
+.pp-sos {
+  background: linear-gradient(135deg, #ff6b4a, var(--sos));
+  border: none;
+  border-radius: 24px;
+  box-shadow: 0 16px 30px -12px rgba(229, 70, 46, .6);
+  color: #fff;
+  cursor: pointer;
+  overflow: hidden;
+  padding: 20px;
+  position: relative;
+  text-align: left;
+  width: 100%;
+}
+.pp-pulse { opacity: .22; position: absolute; right: -14px; top: 50%; transform: translateY(-50%); }
+.pp-pulse svg { animation: beat 1.6s ease-in-out infinite; }
+.pp-chip {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: "Nunito";
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  transition: .15s;
+}
+.pp-chip.on { background: var(--amber); border-color: var(--amber); color: #fff; }
+.pp-chip.sage.on { background: var(--sage); border-color: var(--sage); }
+.pp-photoslot {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--amber-soft);
+  border: 2px dashed #e7c9a6;
+  border-radius: 18px;
+  color: var(--amber-deep);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 0;
+  place-items: center;
+  text-align: center;
+  transition: .15s;
+}
+.pp-photoslot.filled { background: var(--sage-soft); border-color: var(--sage); border-style: solid; color: var(--sage); }
+.pp-map {
+  background:
+    linear-gradient(0deg, rgba(0, 0, 0, .04), rgba(0, 0, 0, .04)),
+    repeating-linear-gradient(0deg, #e8f2ea 0 26px, #e2eee5 26px 52px),
+    repeating-linear-gradient(90deg, transparent 0 60px, rgba(0, 0, 0, .03) 60px 61px);
+  border: none;
+  border-radius: 18px;
+  cursor: pointer;
+  display: block;
+  height: 150px;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+.pp-road { background: #fff; border-radius: 4px; position: absolute; }
+.pp-pin {
+  background: var(--sos);
+  border-radius: 50% 50% 50% 6px;
+  box-shadow: 0 8px 16px -4px rgba(229, 70, 46, .6);
+  display: grid;
+  height: 42px;
+  left: 50%;
+  place-items: center;
+  position: absolute;
+  rotate: 45deg;
+  top: 50%;
+  transform: translate(-50%, -100%);
+  width: 42px;
+}
+.pp-pin svg { rotate: -45deg; }
+.pp-btn {
+  align-items: center;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  display: flex;
+  font-family: "Nunito";
+  font-size: 15px;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  padding: 15px;
+  width: 100%;
+}
+.pp-btn-amber { background: var(--amber); box-shadow: 0 10px 20px -8px rgba(224, 134, 12, .7); color: #fff; }
+.pp-btn-sos { background: var(--sos); box-shadow: 0 10px 20px -8px rgba(229, 70, 46, .6); color: #fff; }
+.pp-btn-ghost { background: var(--bg); color: var(--ink); }
+.pp-pill { align-items: center; border-radius: 999px; display: inline-flex; font-size: 11.5px; font-weight: 800; gap: 5px; padding: 4px 10px; }
+.pp-stat { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; flex: 1; padding: 13px; }
+.pp-statnum { font-family: "Fredoka"; font-size: 24px; font-weight: 600; line-height: 1; }
+.pp-listcard { align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; display: flex; gap: 12px; padding: 12px; }
+.pp-thumb { border-radius: 15px; display: grid; flex-shrink: 0; font-size: 30px; height: 60px; place-items: center; width: 60px; }
+.pp-adopt { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+.pp-adopt-img { display: grid; font-size: 58px; height: 128px; place-items: center; position: relative; }
+.pp-fav {
+  background: rgba(255, 255, 255, .92);
+  border: none;
+  border-radius: 50%;
+  color: var(--coral);
+  cursor: pointer;
+  display: grid;
+  height: 34px;
+  place-items: center;
+  position: absolute;
+  right: 9px;
+  top: 9px;
+  width: 34px;
+}
+.pp-result { border-radius: 20px; color: #fff; padding: 18px; }
+.pp-toast {
+  align-items: center;
+  animation: rise .3s ease;
+  background: var(--ink);
+  border-radius: 16px;
+  bottom: 84px;
+  color: #fff;
+  display: flex;
+  font-size: 13.5px;
+  font-weight: 700;
+  gap: 10px;
+  left: 16px;
+  padding: 13px 16px;
+  position: absolute;
+  right: 16px;
+  z-index: 20;
+}
+.pp-segment { background: var(--bg); border-radius: 14px; display: flex; gap: 4px; padding: 4px; }
+.pp-seg {
+  background: none;
+  border: none;
+  border-radius: 10px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  flex: 1;
+  font-family: "Nunito";
+  font-size: 13px;
+  font-weight: 800;
+  padding: 9px;
+}
+.pp-seg.on { background: var(--surface); box-shadow: 0 3px 8px -3px rgba(0, 0, 0, .15); color: var(--ink); }
+.pp-account-hero { align-items: center; display: flex; flex-direction: column; gap: 7px; padding: 18px 0; text-align: center; }
+.pp-avatar { align-items: center; background: var(--amber-soft); border-radius: 50%; color: var(--amber-deep); display: flex; height: 68px; justify-content: center; overflow: hidden; width: 68px; }
+.pp-avatar img { height: 100%; object-fit: cover; width: 100%; }
+.pp-field { color: var(--ink-soft); display: block; font-size: 12px; font-weight: 800; margin-bottom: 11px; }
+.pp-field input { background: var(--bg); border: 1px solid var(--line); border-radius: 13px; color: var(--ink); display: block; margin-top: 5px; outline: none; padding: 12px 13px; width: 100%; }
+.pp-field input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.pp-upload { align-items: center; background: var(--sage-soft); border: 1px dashed var(--sage); border-radius: 14px; color: var(--sage); cursor: pointer; display: flex; font-size: 12.5px; font-weight: 800; gap: 8px; justify-content: center; margin: 12px 0; padding: 13px; }
+
+@keyframes beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 430px) {
+  .pp-phone { border-radius: 28px; box-shadow: 0 18px 40px -16px rgba(58, 42, 34, .4); height: 88vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+`;

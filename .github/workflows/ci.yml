@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [pawpin]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: "npm"
+      - name: Install dependencies
+        run: |
+          cd ${{ matrix.project }}
+          npm install
+      - name: Build web app
+        run: |
+          cd ${{ matrix.project }}
+          npm run build
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm install
+      - name: Run backend syntax check
+        run: |
+          cd backend
+          npm test
+      - name: Audit backend dependencies
+        run: |
+          cd backend
+          npm audit --audit-level=high

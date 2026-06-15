@@ -1,0 +1,16 @@
+# Dependencies and generated builds
+node_modules/
+**/node_modules/
+**/dist/
+**/dist-ios/
+
+# Claude project context (local only)
+CLAUDE.md
+
+# Local secrets and environment overrides
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
