@@ -32,13 +32,18 @@ export async function uploadReportPhoto(photo) {
 }
 
 export async function createReport({ photoUrl, location, tags }) {
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error("Choose a valid location before sending the report");
+  }
   const response = await fetch(`${API_BASE}/reports`, {
     method: "POST",
     headers: requestHeaders(),
     body: JSON.stringify({
       photoUrl,
-      latitude: Number(location.lat),
-      longitude: Number(location.lng),
+      latitude,
+      longitude,
       tags,
       notes: "Report created from PawPin web app",
     }),

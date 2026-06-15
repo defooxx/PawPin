@@ -5,6 +5,8 @@
  */
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
+import { LocationChoiceDialog } from "../components/LocationChoiceDialog.jsx";
+import { getCurrentLocation, stopWatchingLocation, watchCurrentLocation } from "../services/location.js";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "http://localhost:4000").replace(/\/$/, "");
 
@@ -16,6 +18,15 @@ async function fetchJSON(path) {
   } catch {
     return [];
   }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 const KATHMANDU = [27.7172, 85.324];
@@ -51,6 +62,26 @@ export function MapScreen({ toast }) {
   const [rescuePins, setRescuePins] = useState([]);
   const [lostPins, setLostPins]   = useState([]);
   const [locating, setLocating]   = useState(false);
+  const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
+  const [sharingLocation, setSharingLocation] = useState(false);
+  const watchRef = useRef(null);
+
+  const showUserLocation = (location, animate = true) => {
+    if (!mapRef.current) return;
+    const coords = [location.latitude, location.longitude];
+    if (userMarkerRef.current) userMarkerRef.current.remove();
+    userMarkerRef.current = L.marker(coords, { icon: ICONS.user })
+      .bindPopup("<strong>You are here</strong>")
+      .addTo(mapRef.current);
+    if (animate) mapRef.current.flyTo(coords, 15, { animate: true, duration: 1 });
+  };
+
+  const stopSharing = () => {
+    stopWatchingLocation(watchRef.current);
+    watchRef.current = null;
+    setSharingLocation(false);
+    setLocating(false);
+  };
 
   // ── initialise Leaflet map once ──────────────────────────────────────────
   useEffect(() => {
@@ -64,6 +95,7 @@ export function MapScreen({ toast }) {
     mapRef.current = map;
 
     return () => {
+      stopWatchingLocation(watchRef.current);
       map.remove();
       mapRef.current = null;
     };
@@ -71,8 +103,10 @@ export function MapScreen({ toast }) {
 
   // ── fetch pins ────────────────────────────────────────────────────────────
   useEffect(() => {
-    fetchJSON("/reports").then(setRescuePins);
-    fetchJSON("/lost?status=open").then(setLostPins);
+    fetchJSON("/map/pins").then((pins) => {
+      setRescuePins(pins.filter((pin) => pin.kind === "rescue"));
+      setLostPins(pins.filter((pin) => pin.kind === "lost"));
+    });
   }, []);
 
   // ── redraw markers when data or filter changes ────────────────────────────
@@ -88,11 +122,14 @@ export function MapScreen({ toast }) {
 
     if (showRescue) {
       rescuePins.forEach((r) => {
-        if (!r.latitude || !r.longitude) return;
-        const m = L.marker([r.latitude, r.longitude], { icon: ICONS.rescue })
+        const latitude = Number(r.latitude);
+        const longitude = Number(r.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        const tags = Array.isArray(r.tags) ? r.tags.join(", ") : (r.tags || "");
+        const m = L.marker([latitude, longitude], { icon: ICONS.rescue })
           .bindPopup(`
             <strong>🆘 Rescue #${r.id}</strong><br/>
-            <span style="font-size:11px;color:#666">${Array.isArray(r.tags) ? r.tags.join(", ") : (r.tags || "")}</span><br/>
+            <span style="font-size:11px;color:#666">${escapeHtml(tags)}</span><br/>
             <span style="font-size:10px;color:#999">${new Date(r.createdAt).toLocaleDateString()}</span>
           `)
           .addTo(mapRef.current);
@@ -102,14 +139,16 @@ export function MapScreen({ toast }) {
 
     if (showLost) {
       lostPins.forEach((p) => {
-        if (!p.latitude || !p.longitude) return;
+        const latitude = Number(p.latitude);
+        const longitude = Number(p.longitude);
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
         const label = p.type === "found" ? "Found" : "Lost";
         const name  = p.petName || p.species || "Pet";
-        const m = L.marker([p.latitude, p.longitude], { icon: ICONS.lost })
+        const m = L.marker([latitude, longitude], { icon: ICONS.lost })
           .bindPopup(`
-            <strong>🔍 ${label}: ${name}</strong><br/>
-            <span style="font-size:11px;color:#666">${p.area || ""}</span><br/>
-            <span style="font-size:11px;color:#666">Posted by ${p.postedBy || "unknown"}</span>
+            <strong>🔍 ${label}: ${escapeHtml(name)}</strong><br/>
+            <span style="font-size:11px;color:#666">${escapeHtml(p.area)}</span><br/>
+            <span style="font-size:11px;color:#666">Posted by ${escapeHtml(p.postedBy || "unknown")}</span>
           `)
           .addTo(mapRef.current);
         markersRef.current.push(m);
@@ -118,21 +157,33 @@ export function MapScreen({ toast }) {
   }, [filter, rescuePins, lostPins]);
 
   // ── locate me ─────────────────────────────────────────────────────────────
-  const locateMe = () => {
+  const useLocation = async (mode) => {
+    setLocationChoiceOpen(false);
+    stopSharing();
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const coords = [pos.coords.latitude, pos.coords.longitude];
-        if (userMarkerRef.current) userMarkerRef.current.remove();
-        userMarkerRef.current = L.marker(coords, { icon: ICONS.user })
-          .bindPopup("<strong>You are here</strong>")
-          .addTo(mapRef.current);
-        mapRef.current.flyTo(coords, 15, { animate: true, duration: 1 });
+    try {
+      if (mode === "share") {
+        let firstUpdate = true;
+        watchRef.current = watchCurrentLocation(
+          (location) => {
+            showUserLocation(location, firstUpdate);
+            firstUpdate = false;
+            setSharingLocation(true);
+            setLocating(false);
+          },
+          (error) => {
+            stopSharing();
+            toast?.(error.message);
+          },
+        );
+      } else {
+        showUserLocation(await getCurrentLocation());
         setLocating(false);
-      },
-      () => { toast?.("Could not get your location"); setLocating(false); },
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
+      }
+    } catch (error) {
+      setLocating(false);
+      toast?.(error.message);
+    }
   };
 
   return (
@@ -151,12 +202,12 @@ export function MapScreen({ toast }) {
             color: filter === id ? "#fff" : "var(--ink)",
           }}>{label}</button>
         ))}
-        <button onClick={locateMe} disabled={locating} style={{
+        <button onClick={() => sharingLocation ? stopSharing() : setLocationChoiceOpen(true)} disabled={locating} style={{
           marginLeft: "auto", padding: "5px 14px", borderRadius: 20,
           border: "1.5px solid var(--sage)", background: "var(--sage-soft)",
           color: "var(--sage)", fontWeight: 700, fontSize: 12, cursor: "pointer",
           opacity: locating ? 0.5 : 1,
-        }}>{locating ? "Locating…" : "📍 My location"}</button>
+        }}>{locating ? "Locating…" : sharingLocation ? "Stop sharing" : "📍 My location"}</button>
       </div>
 
       {/* Legend */}
@@ -178,6 +229,7 @@ export function MapScreen({ toast }) {
 
       {/* Map container — Leaflet mounts here */}
       <div ref={containerRef} style={{ height: 510 }} />
+      <LocationChoiceDialog open={locationChoiceOpen} onClose={() => setLocationChoiceOpen(false)} onChoose={useLocation} />
 
     </div>
   );

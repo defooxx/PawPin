@@ -287,6 +287,11 @@ button:disabled { cursor: not-allowed; }
 .pp-field input { background: var(--bg); border: 1px solid var(--line); border-radius: 13px; color: var(--ink); display: block; margin-top: 5px; outline: none; padding: 12px 13px; width: 100%; }
 .pp-field input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
 .pp-upload { align-items: center; background: var(--sage-soft); border: 1px dashed var(--sage); border-radius: 14px; color: var(--sage); cursor: pointer; display: flex; font-size: 12.5px; font-weight: 800; gap: 8px; justify-content: center; margin: 12px 0; padding: 13px; }
+.pp-consent-backdrop { align-items: center; background: rgba(42, 29, 22, .56); display: flex; inset: 0; justify-content: center; padding: 18px; position: fixed; z-index: 10000; }
+.pp-consent { background: var(--surface); border-radius: 22px; box-shadow: 0 20px 50px rgba(42, 29, 22, .28); padding: 22px 18px 18px; position: relative; text-align: center; width: min(340px, 100%); }
+.pp-consent .pp-btn + .pp-btn { margin-top: 9px; }
+.pp-consent-close { position: absolute; right: 10px; top: 10px; }
+.pp-location-sharing { color: var(--sage); font-size: 11.5px; font-weight: 800; margin: 7px 0 0; text-align: center; }
 
 @keyframes beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }

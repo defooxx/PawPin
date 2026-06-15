@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, Building2, Camera, Check, Navigation, PawPrint, Phone, Plus } from "lucide-react";
 import L from "leaflet";
 import { fade, RESCUE_ISSUES, SHELTERS } from "../data.js";
+import { LocationChoiceDialog } from "../components/LocationChoiceDialog.jsx";
 import { createReport, uploadReportPhoto } from "../services/api.js";
-import { getCurrentLocation } from "../services/location.js";
+import { getCurrentLocation, stopWatchingLocation, watchCurrentLocation } from "../services/location.js";
 
 const KATHMANDU = [27.7172, 85.324];
 
@@ -72,7 +73,21 @@ export function RescueScreen({ toast }) {
   const [sent, setSent]     = useState(false);
   const [loading, setLoading] = useState(false);
   const [pin, setPin]       = useState(null); // [lat, lng]
+  const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
+  const [sharingLocation, setSharingLocation] = useState(false);
   const fileRef = useRef(null);
+  const watchRef = useRef(null);
+
+  const stopSharing = () => {
+    stopWatchingLocation(watchRef.current);
+    watchRef.current = null;
+    setSharingLocation(false);
+  };
+
+  useEffect(() => () => {
+    stopWatchingLocation(watchRef.current);
+    watchRef.current = null;
+  }, []);
 
   const toggleIssue = (issue) =>
     setIssues((cur) => cur.includes(issue) ? cur.filter((i) => i !== issue) : [...cur, issue]);
@@ -85,13 +100,28 @@ export function RescueScreen({ toast }) {
     reader.readAsDataURL(file);
   };
 
-  const locateMe = async () => {
+  const useLocation = async (mode) => {
+    setLocationChoiceOpen(false);
+    stopSharing();
     try {
-      const loc = await getCurrentLocation();
-      setPin([loc.latitude, loc.longitude]);
-      toast("Location pinned 📍");
-    } catch {
-      toast("Could not get your location");
+      if (mode === "share") {
+        watchRef.current = watchCurrentLocation(
+          (loc) => {
+            setPin([loc.latitude, loc.longitude]);
+            setSharingLocation(true);
+          },
+          (error) => {
+            stopSharing();
+            toast(error.message);
+          },
+        );
+        return;
+      }
+      const location = await getCurrentLocation();
+      setPin([location.latitude, location.longitude]);
+      toast("Location used once");
+    } catch (error) {
+      toast(error.message);
     }
   };
 
@@ -115,7 +145,7 @@ export function RescueScreen({ toast }) {
     }
   };
 
-  const reset = () => { setSent(false); setPhoto(null); setIssues([]); setPin(null); };
+  const reset = () => { stopSharing(); setSent(false); setPhoto(null); setIssues([]); setPin(null); };
 
   if (sent) {
     return (
@@ -177,16 +207,18 @@ export function RescueScreen({ toast }) {
         Tap anywhere on the map to pin the exact location, or use your GPS.
       </p>
 
-      <RescueMiniMap pin={pin} onPin={setPin} />
+      <RescueMiniMap pin={pin} onPin={(nextPin) => { stopSharing(); setPin(nextPin); }} />
 
       {pin && (
         <div style={{ fontSize: 12, color: "var(--sage)", fontWeight: 700, marginTop: 6 }}>
           📍 Pin: {pin[0].toFixed(5)}, {pin[1].toFixed(5)}
         </div>
       )}
-      <button className="pp-btn pp-btn-ghost" style={{ marginTop: 10, fontSize: 13.5 }} onClick={locateMe}>
-        <Navigation size={16} /> Use my current location
+      <button className="pp-btn pp-btn-ghost" style={{ marginTop: 10, fontSize: 13.5 }} onClick={() => sharingLocation ? stopSharing() : setLocationChoiceOpen(true)}>
+        <Navigation size={16} /> {sharingLocation ? "Stop sharing location" : "Use my current location"}
       </button>
+      {sharingLocation && <p className="pp-location-sharing">Location is updating while this screen is open.</p>}
+      <LocationChoiceDialog open={locationChoiceOpen} onClose={() => setLocationChoiceOpen(false)} onChoose={useLocation} />
 
       <button className="pp-btn pp-btn-sos" style={{ marginTop: 14, opacity: loading ? .65 : 1 }} disabled={loading} onClick={handleSubmit}>
         <Bell size={18} /> {loading ? "Sending report..." : "Alert nearest shelter"}

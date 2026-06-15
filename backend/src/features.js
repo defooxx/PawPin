@@ -214,6 +214,41 @@ router.get("/vets", async (req, res) => {
 // ─── lost & found ─────────────────────────────────────────────────────────────
 
 /**
+ * GET /map/pins
+ * Public map data. Rescue coordinates are rounded to avoid exposing an exact
+ * animal location; approved responders use the protected moderation routes.
+ */
+router.get("/map/pins", async (req, res) => {
+  const [reports, lostPosts] = await Promise.all([
+    db("reports")
+      .whereIn("status", ["pending", "review"])
+      .select("id", "latitude", "longitude", "tags", "status", "createdAt")
+      .orderBy("createdAt", "desc")
+      .limit(100),
+    db("lost_posts as post")
+      .join("users as user", "post.userId", "user.id")
+      .where("post.status", "open")
+      .select(
+        "post.id", "post.type", "post.petName", "post.species", "post.latitude",
+        "post.longitude", "post.area", "post.createdAt", "user.name as postedBy",
+      )
+      .orderBy("post.createdAt", "desc")
+      .limit(100),
+  ]);
+
+  res.json([
+    ...reports.map((report) => ({
+      ...report,
+      kind: "rescue",
+      latitude: Number(Number(report.latitude).toFixed(3)),
+      longitude: Number(Number(report.longitude).toFixed(3)),
+      tags: JSON.parse(report.tags),
+    })),
+    ...lostPosts.map((post) => ({ ...post, kind: "lost" })),
+  ]);
+});
+
+/**
  * GET /lost
  * List lost/found posts. Filter by type (lost|found) or status (open|reunited).
  */

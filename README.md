@@ -42,6 +42,11 @@ Local admin credentials are configured only in `backend/.env` using
 `ADMIN_EMAIL` and `ADMIN_PASSWORD`. Change them before any shared deployment.
 Open `/admin` in the web app for the dedicated admin entry point.
 
+Location buttons always ask the user to choose between one GPS reading and
+continuous foreground sharing. Continuous sharing stops when the user taps
+Stop Sharing, closes the form, or leaves the screen. PawPin does not request
+background-location permission.
+
 Cloudinary credentials belong only in `backend/.env`. Copy
 `backend/.env.example` to `backend/.env`, fill in the three Cloudinary values,
 and configure `CORS_ORIGINS` for the browser origins allowed to call the API.
