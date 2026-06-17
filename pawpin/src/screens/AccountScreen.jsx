@@ -88,12 +88,11 @@ function AuthForm({ onAuthenticated, toast }) {
         toast("Password updated. Sign in with your new password.");
       } else {
         const session = mode === "login" ? await login(form) : await register(form);
-        if (session.verificationRequired) {
+        onAuthenticated(session.user);
+        if (mode === "register" && session.verificationRequired) {
           setForm((current) => ({ ...current, token: session.developmentVerificationToken || "" }));
-          setMode("verify");
-          toast("Account created. Verify your email to continue.");
+          toast(session.verificationEmailSent ? "Account created. Check your email to verify when you can." : "Account created. You can verify your email from your profile.");
         } else {
-          onAuthenticated(session.user);
           toast(`Welcome${session.user.name ? `, ${session.user.name}` : ""}`);
         }
       }
