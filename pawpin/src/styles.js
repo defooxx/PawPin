@@ -302,6 +302,89 @@ button:disabled { cursor: not-allowed; }
 .pp-notice p { margin: 3px 0 0; }
 .pp-notice input { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); margin-top: 8px; outline: none; padding: 9px 10px; width: 100%; }
 .pp-upload { align-items: center; background: var(--sage-soft); border: 1px dashed var(--sage); border-radius: 14px; color: var(--sage); cursor: pointer; display: flex; font-size: 12.5px; font-weight: 800; gap: 8px; justify-content: center; margin: 12px 0; padding: 13px; }
+.pp-auth-flow { display: flex; flex-direction: column; justify-content: center; min-height: 610px; padding: 18px 8px 28px; }
+.pp-auth-head { align-items: center; display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; text-align: center; }
+.pp-auth-icon {
+  align-items: center;
+  background: var(--amber);
+  border-radius: 26px;
+  box-shadow: 0 18px 30px -18px rgba(224, 134, 12, .8);
+  display: grid;
+  font-size: 34px;
+  height: 86px;
+  place-items: center;
+  width: 86px;
+}
+.pp-auth-icon.sage { background: var(--sage); box-shadow: 0 18px 30px -18px rgba(63, 155, 126, .8); }
+.pp-auth-title { font-family: "Fredoka"; font-size: 34px; font-weight: 700; letter-spacing: -.8px; line-height: 1; margin: 6px 0 0; }
+.pp-auth-sub { color: var(--ink-soft); font-size: 19px; font-weight: 700; line-height: 1.35; margin: 0; }
+.pp-auth-choice {
+  align-items: center;
+  background: var(--surface);
+  border: 1.5px solid #d9c9ba;
+  border-radius: 18px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 13px;
+  grid-template-columns: 52px 1fr 24px;
+  min-height: 104px;
+  overflow: hidden;
+  padding: 17px;
+  position: relative;
+  text-align: left;
+}
+.pp-auth-choice b { display: block; font-family: "Fredoka"; font-size: 21px; line-height: 1.05; }
+.pp-auth-choice span { color: var(--ink-soft); display: block; font-size: 15px; font-weight: 800; line-height: 1.35; margin-top: 5px; }
+.pp-auth-choice-icon { align-items: center; background: #fff0f1; border-radius: 16px; color: #4285f4; display: grid; font-size: 25px; font-weight: 900; height: 52px; place-items: center; width: 52px; }
+.pp-google-hitarea { inset: 0; opacity: .001; position: absolute; }
+.pp-google-hitarea > div { height: 100% !important; width: 100% !important; }
+.pp-auth-foot { color: var(--ink-soft); font-size: 15px; font-weight: 900; margin: 120px 0 0; text-align: center; }
+.pp-phone-entry { color: var(--ink-soft); display: block; font-size: 15px; font-weight: 900; margin-bottom: 15px; }
+.pp-phone-input {
+  align-items: center;
+  background: var(--bg);
+  border: 2px solid var(--amber);
+  border-radius: 22px;
+  box-shadow: 0 0 0 5px var(--amber-soft);
+  display: flex;
+  gap: 12px;
+  margin-top: 9px;
+  padding: 18px;
+}
+.pp-phone-input strong { background: #f4e7d8; border-radius: 11px; color: var(--ink); flex-shrink: 0; font-size: 18px; padding: 8px 11px; }
+.pp-phone-input input { background: transparent; border: none; color: var(--ink); font-size: 19px; font-weight: 900; outline: none; width: 100%; }
+.pp-auth-note {
+  background: var(--sage-soft);
+  border: 1.5px solid var(--sage);
+  border-radius: 18px;
+  color: var(--sage);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.45;
+  margin: 14px 0 26px;
+  padding: 18px;
+}
+.pp-otp-wrap { display: block; margin: 14px 0 24px; position: relative; }
+.pp-otp-wrap input { height: 1px; left: 50%; opacity: 0; position: absolute; top: 50%; width: 1px; }
+.pp-otp-boxes { display: grid; gap: 11px; grid-template-columns: repeat(6, 1fr); }
+.pp-otp-boxes span {
+  align-items: center;
+  background: var(--bg);
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  color: #e8d7c6;
+  display: flex;
+  font-family: "Fredoka";
+  font-size: 30px;
+  font-weight: 700;
+  height: 58px;
+  justify-content: center;
+}
+.pp-otp-boxes span.filled { border-color: var(--amber); box-shadow: 0 0 0 5px var(--amber-soft); color: var(--ink); }
+.pp-sr-only { height: 1px; margin: -1px; overflow: hidden; position: absolute; width: 1px; }
+.pp-auth-roles { margin: 0 0 22px; }
+.pp-auth-roles .pp-role-choice { border-radius: 18px; font-size: 13px; gap: 8px; min-height: 82px; }
 .pp-consent-backdrop { align-items: center; background: rgba(42, 29, 22, .56); display: flex; inset: 0; justify-content: center; padding: 18px; position: fixed; z-index: 10000; }
 .pp-consent { background: var(--surface); border-radius: 22px; box-shadow: 0 20px 50px rgba(42, 29, 22, .28); padding: 22px 18px 18px; position: relative; text-align: center; width: min(340px, 100%); }
 .pp-consent .pp-btn + .pp-btn { margin-top: 9px; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, Building2, Check, FileCheck2, LogOut, Phone,
+  ArrowLeft, Building2, Check, ChevronRight, FileCheck2, LogOut, Phone,
   ShieldCheck, Stethoscope, UserRound,
 } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
@@ -25,6 +25,17 @@ function SelectField({ label, children, ...props }) {
   return <label className="pp-field"><span>{label}</span><select {...props}>{children}</select></label>;
 }
 
+function AuthIcon({ children, tone = "amber" }) {
+  return <div className={`pp-auth-icon ${tone}`}>{children}</div>;
+}
+
+function maskPhone(number) {
+  const digits = number.replace(/\D/g, "");
+  if (!digits) return "+977 98xxxxxxxx";
+  const local = digits.replace(/^977/, "");
+  return `+977 ${local.slice(0, 2)}${"x".repeat(Math.max(0, local.length - 2))}`;
+}
+
 const nepalPlaces = [
   "Kathmandu", "Lalitpur", "Bhaktapur", "Pokhara", "Bharatpur", "Biratnagar", "Birgunj", "Dharan", "Butwal", "Hetauda",
   "Janakpur", "Nepalgunj", "Dhangadhi", "Itahari", "Tulsipur", "Ghorahi", "Damak", "Birtamod", "Mechinagar", "Kirtipur",
@@ -39,7 +50,7 @@ const nepalPlaces = [
 
 // Profile setup — shown after first Google or phone sign-in when name/location is missing
 function ProfileSetup({ user, onDone, toast }) {
-  const [form, setForm] = useState({ name: user.name || "", location: user.location || "" });
+  const [form, setForm] = useState({ name: user.name || "", location: user.location || "", accountType: user.accountType || "user" });
   const [loading, setLoading] = useState(false);
   const change = (key) => (event) => setForm((cur) => ({ ...cur, [key]: event.target.value }));
 
@@ -48,7 +59,7 @@ function ProfileSetup({ user, onDone, toast }) {
     if (!form.name.trim() || !form.location) return toast("Please enter your name and choose a city.");
     setLoading(true);
     try {
-      const result = await updateProfile({ name: form.name.trim(), location: form.location });
+      const result = await updateProfile({ name: form.name.trim(), location: form.location, accountType: form.accountType });
       onDone(result.user);
     } catch (error) {
       toast(error.message);
@@ -58,26 +69,34 @@ function ProfileSetup({ user, onDone, toast }) {
   };
 
   return (
-    <form onSubmit={submit} style={fade}>
-      <div className="pp-account-hero">
-        <div style={{ fontSize: 36 }}>🐾</div>
-        <h1 className="pp-h1">Almost there!</h1>
-        <p className="pp-sub">Tell us a little about yourself so we can show you the right animals near you.</p>
+    <form className="pp-auth-flow" onSubmit={submit} style={fade}>
+      <div className="pp-auth-head">
+        <AuthIcon tone="sage">🎉</AuthIcon>
+        <h1 className="pp-auth-title">One last thing</h1>
+        <p className="pp-auth-sub">Tell us about yourself — takes 10 seconds.</p>
       </div>
       <Field label="Your name" value={form.name} onChange={change("name")} placeholder="e.g. Priya Sharma" required />
       <SelectField label="Your city in Nepal" value={form.location} onChange={change("location")} required>
         <option value="">Choose a city or place</option>
         {nepalPlaces.map((place) => <option key={place} value={place}>{place}</option>)}
       </SelectField>
+      <p className="pp-field" style={{ marginBottom: 8 }}>I am joining as</p>
+      <div className="pp-role-grid pp-auth-roles">
+        {[["user", UserRound, "Individual"], ["shelter", Building2, "Shelter"], ["vet", Stethoscope, "Vet"]].map(([type, Icon, label]) => (
+          <button type="button" key={type} className={"pp-role-choice" + (form.accountType === type ? " on" : "")} onClick={() => setForm((current) => ({ ...current, accountType: type }))}>
+            <Icon size={18} />{label}
+          </button>
+        ))}
+      </div>
       <button className="pp-btn pp-btn-amber" disabled={loading || !form.name.trim() || !form.location}>
-        {loading ? "Saving..." : "Save and continue"}
+        {loading ? "Saving..." : "Let's go 🐾"}
       </button>
     </form>
   );
 }
 
 // Phone OTP flow — onAuthenticated(user, isNewUser) called when OTP confirmed
-function PhoneAuthFlow({ onAuthenticated, toast }) {
+function PhoneAuthFlow({ onAuthenticated, onBack, toast }) {
   const [step, setStep] = useState("phone"); // phone | otp
   const [phoneLocal, setPhoneLocal] = useState("");
   const [otp, setOtp] = useState("");
@@ -135,46 +154,52 @@ function PhoneAuthFlow({ onAuthenticated, toast }) {
   };
 
   if (step === "otp") {
+    const otpDigits = otp.padEnd(6, " ").slice(0, 6).split("");
     return (
-      <form onSubmit={verifyOtp} style={fade}>
-        <div className="pp-account-hero">
-          <Phone size={34} color="var(--sage)" />
-          <h1 className="pp-h1">Enter the OTP</h1>
-          <p className="pp-sub">We sent a 6-digit code to your phone. Enter it below.</p>
+      <form className="pp-auth-flow" onSubmit={verifyOtp} style={fade}>
+        <div className="pp-auth-head">
+          <AuthIcon tone="sage">✉️</AuthIcon>
+          <h1 className="pp-auth-title">Check your SMS</h1>
+          <p className="pp-auth-sub">6-digit code sent to<br />{maskPhone(phoneLocal)}</p>
         </div>
-        <Field
-          label="6-digit OTP"
-          value={otp}
-          onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          required
-          placeholder="123456"
-        />
+        <label className="pp-otp-wrap">
+          <span className="pp-sr-only">6-digit OTP</span>
+          <input
+            value={otp}
+            onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+            aria-label="6-digit OTP"
+          />
+          <span className="pp-otp-boxes" aria-hidden="true">
+            {otpDigits.map((digit, index) => <span className={digit.trim() ? "filled" : ""} key={index}>{digit.trim() || "—"}</span>)}
+          </span>
+        </label>
         <button className="pp-btn pp-btn-amber" disabled={loading || otp.length < 6}>
-          {loading ? "Verifying..." : "Verify OTP"}
+          {loading ? "Verifying..." : "Verify →"}
+        </button>
+        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} disabled>
+          Resend in 0:45
         </button>
         <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => { setStep("phone"); setOtp(""); }}>
-          Change number
+          ← Wrong number?
         </button>
       </form>
     );
   }
 
   return (
-    <form onSubmit={sendOtp} style={fade}>
-      <div className="pp-account-hero">
-        <Phone size={34} color="var(--sage)" />
-        <h1 className="pp-h1">Sign in with phone</h1>
-        <p className="pp-sub">We'll send a one-time code to your Nepal number via SMS.</p>
+    <form className="pp-auth-flow" onSubmit={sendOtp} style={fade}>
+      <div className="pp-auth-head">
+        <AuthIcon>📱</AuthIcon>
+        <h1 className="pp-auth-title">Your number</h1>
+        <p className="pp-auth-sub">We'll text a one-time code. Works with NTC and Ncell.</p>
       </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-        <label className="pp-field" style={{ flex: "0 0 auto" }}>
-          <span>Country</span>
-          <input value="+977 🇳🇵" readOnly style={{ width: 90 }} />
-        </label>
-        <label className="pp-field" style={{ flex: 1 }}>
-          <span>Phone number</span>
+      <label className="pp-phone-entry">
+        <span>Nepal mobile number</span>
+        <div className="pp-phone-input">
+          <strong>🇳🇵 +977</strong>
           <input
             type="tel"
             inputMode="numeric"
@@ -183,12 +208,14 @@ function PhoneAuthFlow({ onAuthenticated, toast }) {
             placeholder="98xxxxxxxx"
             required
           />
-        </label>
-      </div>
+        </div>
+      </label>
+      <div className="pp-auth-note">🔒 A verified Nepal number is required to alert shelters — keeps fake reports out.</div>
       <div id="recaptcha-container" />
       <button className="pp-btn pp-btn-amber" disabled={loading}>
-        {loading ? "Sending OTP..." : "Send OTP"}
+        {loading ? "Sending OTP..." : "Send code →"}
       </button>
+      <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={onBack}>← Back</button>
     </form>
   );
 }
@@ -212,27 +239,35 @@ function AuthLanding({ onAuthenticated, toast }) {
     return (
       <div style={fade}>
         <button className="pp-icobtn" style={{ marginBottom: 8 }} onClick={() => setMode("landing")} aria-label="Back"><ArrowLeft size={18} /></button>
-        <PhoneAuthFlow onAuthenticated={onAuthenticated} toast={toast} />
+        <PhoneAuthFlow onAuthenticated={onAuthenticated} onBack={() => setMode("landing")} toast={toast} />
       </div>
     );
   }
 
   return (
-    <div style={{ ...fade, textAlign: "center" }}>
-      <div className="pp-account-hero">
-        <div style={{ fontSize: 48 }}>🐾</div>
-        <h1 className="pp-h1">Welcome to PawPin</h1>
-        <p className="pp-sub">Nepal's animal rescue community. Sign in to track your reports, find shelters, and help animals near you.</p>
+    <div className="pp-auth-flow" style={fade}>
+      <div className="pp-auth-head">
+        <AuthIcon>🐾</AuthIcon>
+        <h1 className="pp-auth-title">PawPin</h1>
+        <p className="pp-auth-sub">Rescue. Report. Reunite.<br />Nepal's animal welfare community.</p>
       </div>
 
       <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
         {googleClientId
-          ? <div style={{ display: "grid", placeItems: "center" }}>
-              <GoogleLogin
-                onSuccess={(response) => finishGoogleLogin(response.credential)}
-                onError={() => toast("Google sign-in failed")}
-                width="280"
-              />
+          ? <div className="pp-auth-choice google">
+              <div className="pp-auth-choice-icon">G</div>
+              <div>
+                <b>Continue with Google</b>
+                <span>Quick sign in with your Google account</span>
+              </div>
+              <ChevronRight size={20} />
+              <div className="pp-google-hitarea">
+                <GoogleLogin
+                  onSuccess={(response) => finishGoogleLogin(response.credential)}
+                  onError={() => toast("Google sign-in failed")}
+                  width="320"
+                />
+              </div>
             </div>
           : <p className="pp-sub" style={{ fontSize: 12 }}>Google sign-in needs VITE_GOOGLE_CLIENT_ID in Vercel.</p>}
 
@@ -243,13 +278,13 @@ function AuthLanding({ onAuthenticated, toast }) {
         </div>}
 
         <button className="pp-btn pp-btn-ghost" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => setMode("phone")} disabled={!isFirebaseConfigured}>
-          <Phone size={17} />
-          {isFirebaseConfigured ? "Sign in with phone number" : "Phone sign-in needs Firebase env vars"}
+          <span style={{ fontSize: 20 }}>📱</span>
+          <span>{isFirebaseConfigured ? "Use Nepal phone number" : "Phone sign-in needs Firebase env vars"}</span>
         </button>
       </div>
 
-      <p className="pp-sub" style={{ fontSize: 11, marginTop: 20 }}>
-        By signing in you accept PawPin's Terms of Service and Privacy Policy. Your location is only used with your permission.
+      <p className="pp-auth-foot">
+        No password needed. Ever.
       </p>
     </div>
   );
