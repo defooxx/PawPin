@@ -107,6 +107,7 @@ export const config = Object.freeze({
     from: optional("EMAIL_FROM"),
   }),
   firebase: Object.freeze({
+    serviceAccountJson: optional("FIREBASE_SERVICE_ACCOUNT_JSON"),
     projectId: optional("FIREBASE_PROJECT_ID"),
     clientEmail: optional("FIREBASE_CLIENT_EMAIL"),
     privateKey: optional("FIREBASE_PRIVATE_KEY")?.replace(/\\n/g, "\n"),
