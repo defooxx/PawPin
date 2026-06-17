@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Building2, Check, FileCheck2, KeyRound, LogOut, MailCheck, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
+import { ArrowLeft, Building2, Check, Eye, EyeOff, FileCheck2, KeyRound, LogOut, MailCheck, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import {
   getApplications,
@@ -19,6 +19,37 @@ import { fade } from "../data.js";
 
 function Field({ label, ...props }) {
   return <label className="pp-field"><span>{label}</span><input {...props} /></label>;
+}
+
+const nepalPlaces = [
+  "Kathmandu", "Lalitpur", "Bhaktapur", "Pokhara", "Bharatpur", "Biratnagar", "Birgunj", "Dharan", "Butwal", "Hetauda",
+  "Janakpur", "Nepalgunj", "Dhangadhi", "Itahari", "Tulsipur", "Ghorahi", "Damak", "Birtamod", "Mechinagar", "Kirtipur",
+  "Madhyapur Thimi", "Banepa", "Dhulikhel", "Panauti", "Bidur", "Dhulabari", "Rajbiraj", "Lahan", "Siraha", "Jaleshwar",
+  "Kalaiya", "Gaur", "Malangwa", "Sindhuli", "Ramechhap", "Charikot", "Chautara", "Dhunche", "Besisahar", "Gorkha",
+  "Damauli", "Waling", "Baglung", "Beni", "Kusma", "Tansen", "Tamghas", "Sandhikharka", "Taulihawa", "Lumbini",
+  "Siddharthanagar", "Lamahi", "Kohalpur", "Gulariya", "Tikapur", "Mahendranagar", "Dadeldhura", "Dipayal", "Silgadhi",
+  "Dasharathchand", "Chainpur", "Martadi", "Mangalsen", "Jumla", "Khalanga", "Dunai", "Simikot", "Manang", "Mustang",
+  "Taplejung", "Phidim", "Ilam", "Dhankuta", "Terhathum", "Sankhuwasabha", "Bhojpur", "Khotang", "Okhaldhunga", "Solukhumbu",
+  "Udayapur", "Gaighat", "Inaruwa", "Urlabari", "Letang", "Godawari", "Tokha", "Budhanilkantha", "Chandragiri", "Tarakeshwar",
+];
+
+function SelectField({ label, children, ...props }) {
+  return <label className="pp-field"><span>{label}</span><select {...props}>{children}</select></label>;
+}
+
+function PasswordField({ label, value, onChange, ...props }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <label className="pp-field">
+      <span>{label}</span>
+      <span className="pp-password-wrap">
+        <input {...props} type={visible ? "text" : "password"} value={value} onChange={onChange} />
+        <button type="button" className="pp-eye-btn" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"}>
+          {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+        </button>
+      </span>
+    </label>
+  );
 }
 
 function AuthForm({ onAuthenticated, toast }) {
@@ -112,8 +143,8 @@ function AuthForm({ onAuthenticated, toast }) {
         <div className="pp-account-hero"><KeyRound size={34} color="var(--amber-deep)" /><h1 className="pp-h1">{mode === "forgot" ? "Reset your password" : "Choose a new password"}</h1></div>
         {mode === "forgot" ? <Field label="Email" type="email" value={form.email} onChange={change("email")} required /> : <>
           <Field label="Reset token" value={form.token} onChange={change("token")} required />
-          <Field label="New password" type="password" value={form.password} onChange={change("password")} required />
-          <Field label="Confirm password" type="password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
+          <PasswordField label="New password" value={form.password} onChange={change("password")} required />
+          <PasswordField label="Confirm password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
         </>}
         <button className="pp-btn pp-btn-amber" disabled={loading}>{mode === "forgot" ? "Continue" : "Update password"}</button>
         <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => setMode("login")}>Back to sign in</button>
@@ -138,12 +169,15 @@ function AuthForm({ onAuthenticated, toast }) {
         <Field label="Name" value={form.name} onChange={change("name")} required />
       </>}
       <Field label="Email" type="email" value={form.email} onChange={change("email")} required />
-      <Field label="Password" type="password" value={form.password} onChange={change("password")} minLength={10} required />
+      <PasswordField label="Password" value={form.password} onChange={change("password")} minLength={10} required />
       {mode === "register" && <>
-        <Field label="Confirm password" type="password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
+        <PasswordField label="Confirm password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
         <div className="pp-password-checks">{passwordChecks.map(([label, valid]) => <span className={valid ? "ok" : ""} key={label}><Check size={12} />{label}</span>)}</div>
-        <Field label="Location (optional)" value={form.location} onChange={change("location")} placeholder="City or neighbourhood" />
-        <label className="pp-field">Location preference<select value={form.locationConsent} onChange={change("locationConsent")}><option value="ask">Ask every time</option><option value="once">Allow once when requested</option><option value="while_using">Allow while using PawPin</option></select></label>
+        <SelectField label="City or place in Nepal" value={form.location} onChange={change("location")}>
+          <option value="">Choose a city or place</option>
+          {nepalPlaces.map((place) => <option key={place} value={place}>{place}</option>)}
+        </SelectField>
+        <SelectField label="Location preference" value={form.locationConsent} onChange={change("locationConsent")}><option value="ask">Ask every time</option><option value="once">Allow once when requested</option><option value="while_using">Allow while using PawPin</option></SelectField>
         <label className="pp-check"><input type="checkbox" checked={form.acceptTerms} onChange={check("acceptTerms")} /> I accept the Terms of Service.</label>
         <label className="pp-check"><input type="checkbox" checked={form.acceptPrivacy} onChange={check("acceptPrivacy")} /> I accept the Privacy Policy and understand location is only used with permission.</label>
       </>}

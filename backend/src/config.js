@@ -67,7 +67,8 @@ function unquote(value) {
 function tokenTtl() {
   const value = unquote(process.env.AUTH_TOKEN_TTL || "7d");
   if (!/^\d+(ms|s|m|h|d|w|y)?$/.test(value)) {
-    throw new Error("AUTH_TOKEN_TTL must look like 7d, 20h, 60, or 3600");
+    console.warn(`Invalid AUTH_TOKEN_TTL "${value}". Falling back to 7d.`);
+    return "7d";
   }
   return value;
 }

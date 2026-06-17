@@ -286,6 +286,10 @@ button:disabled { cursor: not-allowed; }
 .pp-field { color: var(--ink-soft); display: block; font-size: 12px; font-weight: 800; margin-bottom: 11px; }
 .pp-field input, .pp-field select { background: var(--bg); border: 1px solid var(--line); border-radius: 13px; color: var(--ink); display: block; margin-top: 5px; outline: none; padding: 12px 13px; width: 100%; }
 .pp-field input:focus, .pp-field select:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.pp-password-wrap { display: block; position: relative; }
+.pp-password-wrap input { padding-right: 42px; }
+.pp-eye-btn { align-items: center; background: none; border: none; color: var(--ink-soft); cursor: pointer; display: flex; height: 40px; justify-content: center; position: absolute; right: 4px; top: 6px; width: 40px; }
+.pp-eye-btn:hover { color: var(--ink); }
 .pp-role-grid { display: grid; gap: 7px; grid-template-columns: repeat(3, 1fr); margin: -4px 0 14px; }
 .pp-role-choice { align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; color: var(--ink-soft); cursor: pointer; display: flex; flex-direction: column; font-size: 10px; font-weight: 800; gap: 5px; padding: 10px 4px; }
 .pp-role-choice.on { background: var(--amber-soft); border-color: var(--amber); color: var(--amber-deep); }
