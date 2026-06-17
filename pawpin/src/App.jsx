@@ -9,11 +9,28 @@ import { RescueScreen } from "./screens/RescueScreen.jsx";
 import { AccountScreen } from "./screens/AccountScreen.jsx";
 import { getMe, hasSession, logout } from "./services/auth.js";
 
+const VALID_TABS = new Set(["home", "rescue", "lost", "map", "adopt", "health", "account"]);
+
+function getInitialTab() {
+  if (window.location.pathname.startsWith("/admin")) return "account";
+  const hashTab = window.location.hash.replace("#", "");
+  return VALID_TABS.has(hashTab) ? hashTab : "home";
+}
+
 export default function App() {
-  const [tab, setTab] = useState(window.location.pathname.startsWith("/admin") ? "account" : "home");
+  const [tab, setTab] = useState(getInitialTab);
   const [toast, setToast] = useState(null);
   const [accountData, setAccountData] = useState(null);
   const toastTimer = useRef(null);
+
+  const navigate = (nextTab) => {
+    if (!VALID_TABS.has(nextTab)) return;
+    setTab(nextTab);
+    const nextHash = `#${nextTab}`;
+    if (window.location.hash !== nextHash) {
+      window.history.pushState(null, "", nextHash);
+    }
+  };
 
   const refreshAccount = async () => {
     if (!hasSession()) {
@@ -30,7 +47,14 @@ export default function App() {
 
   useEffect(() => {
     refreshAccount();
-    return () => clearTimeout(toastTimer.current);
+    const syncTabFromUrl = () => setTab(getInitialTab());
+    window.addEventListener("hashchange", syncTabFromUrl);
+    window.addEventListener("popstate", syncTabFromUrl);
+    return () => {
+      clearTimeout(toastTimer.current);
+      window.removeEventListener("hashchange", syncTabFromUrl);
+      window.removeEventListener("popstate", syncTabFromUrl);
+    };
   }, []);
 
   const ping = (message) => {
@@ -42,13 +66,13 @@ export default function App() {
   return (
     <AppShell
       activeTab={tab}
-      onAccount={() => setTab("account")}
+      onAccount={() => navigate("account")}
       onDonate={() => ping("Donation sent — thank you! 💛")}
-      onTabChange={setTab}
+      onTabChange={navigate}
       toast={toast}
       user={accountData?.user}
     >
-      {tab === "home" && <HomeScreen go={setTab} donate={() => ping("Donation sent — thank you! 💛")} />}
+      {tab === "home" && <HomeScreen go={navigate} donate={() => ping("Donation sent — thank you! 💛")} />}
       {tab === "rescue" && <RescueScreen toast={ping} />}
       {tab === "lost" && <LostScreen toast={ping} />}
       {tab === "map" && <MapScreen toast={ping} />}
@@ -58,11 +82,11 @@ export default function App() {
         data={accountData}
         onAuthenticated={(user) => {
           setAccountData((current) => ({ ...(current ?? {}), user }));
-          setTab("home");
+          navigate("home");
           refreshAccount();
         }}
-        onBack={() => setTab("home")}
-        onLogout={() => { logout(); setAccountData(null); setTab("home"); ping("Signed out"); }}
+        onBack={() => navigate("home")}
+        onLogout={() => { logout(); setAccountData(null); navigate("home"); ping("Signed out"); }}
         refresh={refreshAccount}
         toast={ping}
       />}
