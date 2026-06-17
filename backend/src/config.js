@@ -75,6 +75,7 @@ function tokenTtl() {
 
 export const config = Object.freeze({
   port: positiveInteger("PORT", 4000),
+  frontendUrl: optional("FRONTEND_URL"),
   dbFile: process.env.DB_FILE?.trim() || "./data/pawpin.db",
   jsonLimit: process.env.JSON_LIMIT?.trim() || "10mb",
   maxImageBytes: positiveInteger("MAX_IMAGE_BYTES", 7 * 1024 * 1024),
@@ -100,5 +101,9 @@ export const config = Object.freeze({
     cloudName: required("CLOUDINARY_CLOUD_NAME"),
     apiKey: required("CLOUDINARY_API_KEY"),
     apiSecret: required("CLOUDINARY_API_SECRET"),
+  }),
+  email: Object.freeze({
+    resendApiKey: optional("RESEND_API_KEY"),
+    from: optional("EMAIL_FROM"),
   }),
 });

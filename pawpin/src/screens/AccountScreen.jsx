@@ -129,7 +129,7 @@ function AuthForm({ onAuthenticated, toast }) {
   if (mode === "verify") {
     return (
       <form onSubmit={submit} style={fade}>
-        <div className="pp-account-hero"><MailCheck size={34} color="var(--sage)" /><h1 className="pp-h1">Verify your email</h1><p className="pp-sub">Enter the one-time token sent for {form.email}.</p></div>
+        <div className="pp-account-hero"><MailCheck size={34} color="var(--sage)" /><h1 className="pp-h1">Verify your email</h1><p className="pp-sub">We emailed a one-time token to {form.email}. Paste it here to finish verification.</p></div>
         <Field label="Verification token" value={form.token} onChange={change("token")} required />
         <button className="pp-btn pp-btn-amber" disabled={loading}>Verify email</button>
         <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={resend} disabled={loading}>Send a new token</button>

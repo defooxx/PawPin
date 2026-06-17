@@ -65,6 +65,17 @@ CORS_ORIGINS=https://your-frontend-domain.example
 EXPOSE_AUTH_TOKENS=false
 ```
 
+To send real verification and password reset emails, add:
+
+```text
+FRONTEND_URL=https://paw-pin.vercel.app
+RESEND_API_KEY=<your Resend API key>
+EMAIL_FROM=PawPin <onboarding@resend.dev>
+```
+
+`onboarding@resend.dev` is useful for testing. Before launch, verify a domain
+in Resend and replace `EMAIL_FROM` with an address from that domain.
+
 Do not manually set `PORT`; Railway supplies it. Optional variables and local
 defaults are documented in `backend/.env.example`. After deployment, opening
 `https://your-railway-domain/health` should return `{"status":"ok", ...}`.

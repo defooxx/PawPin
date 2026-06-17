@@ -3,6 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { v2 as cloudinary } from "cloudinary";
 import db from "./db.js";
 import { config } from "./config.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./email.js";
 import {
   hashPassword,
   issueToken,
@@ -124,6 +125,28 @@ async function consumeAuthToken(token, type) {
 
 function developmentToken(key, token) {
   return config.exposeAuthTokens ? { [key]: token } : {};
+}
+
+async function sendVerificationIfPossible(user, token) {
+  if (!token) return false;
+  try {
+    const result = await sendVerificationEmail({ to: user.email, name: user.name, token });
+    return result.sent;
+  } catch (error) {
+    console.error("Verification email failed:", error.message);
+    return false;
+  }
+}
+
+async function sendResetIfPossible(user, token) {
+  if (!token) return false;
+  try {
+    const result = await sendPasswordResetEmail({ to: user.email, name: user.name, token });
+    return result.sent;
+  } catch (error) {
+    console.error("Password reset email failed:", error.message);
+    return false;
+  }
 }
 
 export async function ensureFoundationSchema() {
@@ -255,6 +278,7 @@ router.post("/auth/register", authRateLimit, async (req, res) => {
     } catch (error) {
       console.error("Registration verification token failed:", error.message);
     }
+    const verificationEmailSent = await sendVerificationIfPossible(user, verificationToken);
     try {
       await audit(id, "register", "password");
     } catch (error) {
@@ -263,6 +287,7 @@ router.post("/auth/register", authRateLimit, async (req, res) => {
     return res.status(201).json({
       ...await authResponse(user),
       verificationRequired: Boolean(verificationToken),
+      verificationEmailSent,
       ...developmentToken("developmentVerificationToken", verificationToken),
     });
   } catch (error) {
@@ -291,9 +316,12 @@ router.post("/auth/verify-email", authRateLimit, async (req, res) => {
 router.post("/auth/resend-verification", authRateLimit, async (req, res) => {
   const user = await db("users").where({ email: cleanEmail(req.body?.email) }).first();
   let token;
+  let verificationEmailSent = false;
   if (user && !user.emailVerified && user.status === "active") token = await createAuthToken(user.id, "email_verification");
+  if (user && token) verificationEmailSent = await sendVerificationIfPossible(user, token);
   return res.json({
-    message: "If the account needs verification, a new verification email has been prepared.",
+    message: "If the account needs verification, a new verification email has been sent.",
+    verificationEmailSent,
     ...developmentToken("developmentVerificationToken", token),
   });
 });
@@ -301,9 +329,12 @@ router.post("/auth/resend-verification", authRateLimit, async (req, res) => {
 router.post("/auth/forgot-password", authRateLimit, async (req, res) => {
   const user = await db("users").where({ email: cleanEmail(req.body?.email) }).first();
   let token;
+  let resetEmailSent = false;
   if (user?.passwordHash && user.status === "active") token = await createAuthToken(user.id, "password_reset");
+  if (user && token) resetEmailSent = await sendResetIfPossible(user, token);
   return res.json({
-    message: "If an account exists for that email, password reset instructions have been prepared.",
+    message: "If an account exists for that email, password reset instructions have been sent.",
+    resetEmailSent,
     ...developmentToken("developmentResetToken", token),
   });
 });
