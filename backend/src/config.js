@@ -60,6 +60,18 @@ function optional(name) {
   return value && !value.startsWith("your_") ? value : null;
 }
 
+function unquote(value) {
+  return typeof value === "string" ? value.trim().replace(/^["']|["']$/g, "") : value;
+}
+
+function tokenTtl() {
+  const value = unquote(process.env.AUTH_TOKEN_TTL || "7d");
+  if (!/^\d+(ms|s|m|h|d|w|y)?$/.test(value)) {
+    throw new Error("AUTH_TOKEN_TTL must look like 7d, 20h, 60, or 3600");
+  }
+  return value;
+}
+
 export const config = Object.freeze({
   port: positiveInteger("PORT", 4000),
   dbFile: process.env.DB_FILE?.trim() || "./data/pawpin.db",
@@ -77,7 +89,7 @@ export const config = Object.freeze({
   reporterHashSecret: required("REPORTER_HASH_SECRET"),
   shelterApiToken: optional("SHELTER_API_TOKEN"),
   authJwtSecret: required("AUTH_JWT_SECRET"),
-  authTokenTtl: process.env.AUTH_TOKEN_TTL?.trim() || "7d",
+  authTokenTtl: tokenTtl(),
   authOneTimeTokenMinutes: positiveInteger("AUTH_ONE_TIME_TOKEN_MINUTES", 30),
   exposeAuthTokens: boolean("EXPOSE_AUTH_TOKENS", false),
   googleClientId: optional("GOOGLE_CLIENT_ID"),
