@@ -67,6 +67,11 @@ export const updateProfile = (details) => request("/me", {
   body: JSON.stringify(details),
 });
 
+export const uploadProfilePhoto = (dataUrl) => request("/me/photo", {
+  method: "POST",
+  body: JSON.stringify({ dataUrl }),
+});
+
 export const submitApplication = (details) => request("/applications", {
   method: "POST",
   body: JSON.stringify(details),

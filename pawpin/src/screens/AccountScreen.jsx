@@ -13,6 +13,7 @@ import {
   submitApplication,
   updateProfile,
   uploadApplicationDocument,
+  uploadProfilePhoto,
   verifyEmail,
 } from "../services/auth.js";
 import { fade } from "../data.js";
@@ -297,26 +298,12 @@ function AdminPanel({ toast }) {
 }
 
 function VerificationNotice({ email, refresh, toast }) {
-  const [token, setToken] = useState("");
   const [loading, setLoading] = useState(false);
   const resend = async () => {
     setLoading(true);
     try {
       const result = await resendVerification(email);
-      setToken(result.developmentVerificationToken || "");
       toast(result.message);
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  const confirm = async () => {
-    setLoading(true);
-    try {
-      await verifyEmail(token);
-      toast("Email verified");
-      await refresh();
     } catch (error) {
       toast(error.message);
     } finally {
@@ -328,11 +315,10 @@ function VerificationNotice({ email, refresh, toast }) {
       <MailCheck size={19} />
       <div style={{ flex: 1 }}>
         <b>Verify your email</b>
-        <p className="pp-sub">Verification is required before shelter or vet review documents can be submitted.</p>
-        <input aria-label="Verification token" placeholder="Verification token" value={token} onChange={(event) => setToken(event.target.value)} />
+        <p className="pp-sub">We sent a verification email to {email}. Open it and use the token there to finish verification.</p>
         <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
-          <button className="pp-link" onClick={resend} disabled={loading}>Send token</button>
-          <button className="pp-link" onClick={confirm} disabled={loading || !token}>Verify now</button>
+          <button className="pp-link" onClick={resend} disabled={loading}>{loading ? "Sending..." : "Resend email"}</button>
+          <button className="pp-link" onClick={refresh} disabled={loading}>I verified it</button>
         </div>
       </div>
     </div>
@@ -341,6 +327,7 @@ function VerificationNotice({ email, refresh, toast }) {
 
 export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh, toast }) {
   const [profile, setProfile] = useState(data?.user || null);
+  const [photoUploading, setPhotoUploading] = useState(false);
   useEffect(() => setProfile(data?.user || null), [data]);
 
   if (!profile) return <div><button className="pp-icobtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button><AuthForm onAuthenticated={onAuthenticated} toast={toast} /></div>;
@@ -349,10 +336,33 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
     event.preventDefault();
     try {
       await updateProfile(profile);
-      toast("Profile updated");
+      toast("Profile saved. Your changes are up to date.");
       await refresh();
     } catch (error) {
       toast(error.message);
+    }
+  };
+
+  const uploadPhoto = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPhotoUploading(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadProfilePhoto(dataUrl);
+      setProfile(result.user);
+      toast("Profile photo uploaded.");
+      await refresh();
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setPhotoUploading(false);
+      event.target.value = "";
     }
   };
 
@@ -371,7 +381,10 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
       <form onSubmit={save}>
         <Field label="Name" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required />
         <Field label="Location" value={profile.location || ""} onChange={(event) => setProfile({ ...profile, location: event.target.value })} />
-        <Field label="Photo URL" value={profile.photoUrl || ""} onChange={(event) => setProfile({ ...profile, photoUrl: event.target.value })} />
+        <label className="pp-upload">
+          <UserRound size={18} /> {photoUploading ? "Uploading profile photo..." : profile.photoUrl ? "Change profile photo" : "Upload profile photo"}
+          <input type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={photoUploading} onChange={uploadPhoto} />
+        </label>
         <button className="pp-btn pp-btn-amber">Save profile</button>
       </form>
 

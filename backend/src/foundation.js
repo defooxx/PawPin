@@ -424,6 +424,28 @@ router.patch("/me", requireAuth, async (req, res) => {
   return res.json({ user: publicUser(user) });
 });
 
+router.post("/me/photo", requireAuth, async (req, res) => {
+  const dataUrl = req.body?.dataUrl;
+  const match = typeof dataUrl === "string"
+    ? /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl)
+    : null;
+  const bytes = match ? Buffer.byteLength(match[1].replace(/\s/g, ""), "base64") : 0;
+  if (!match || !bytes || bytes > config.maxImageBytes) {
+    return res.status(400).json({ error: "Profile photo must be a JPEG, PNG, or WebP under 7 MB" });
+  }
+  const uploaded = await cloudinary.uploader.upload(dataUrl, {
+    folder: "pawpin-profiles",
+    resource_type: "image",
+    type: "upload",
+  });
+  await db("users").where({ id: req.user.id }).update({
+    photoUrl: uploaded.secure_url,
+    updatedAt: db.fn.now(),
+  });
+  const user = await db("users").where({ id: req.user.id }).first();
+  return res.status(201).json({ user: publicUser(user), url: uploaded.secure_url });
+});
+
 router.post("/applications/documents", requireAuth, requireVerifiedEmail, async (req, res) => {
   const dataUrl = req.body?.dataUrl;
   const match = typeof dataUrl === "string"
