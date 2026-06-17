@@ -412,11 +412,12 @@ router.get("/me", requireAuth, async (req, res) => {
 });
 
 router.patch("/me", requireAuth, async (req, res) => {
-  const { name, photoUrl = "", location = "" } = req.body || {};
+  const { name, location = "" } = req.body || {};
+  const photoUrl = req.body?.photoUrl || "";
   if (!validProfile({ name, photoUrl, location })) return res.status(400).json({ error: "Invalid profile details" });
   await db("users").where({ id: req.user.id }).update({
     name: stripHtml(name),
-    photoUrl: photoUrl || null,
+    ...(req.body?.photoUrl !== undefined ? { photoUrl: photoUrl || null } : {}),
     location: stripHtml(location),
     updatedAt: db.fn.now(),
   });

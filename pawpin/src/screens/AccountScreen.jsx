@@ -335,7 +335,7 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
   const save = async (event) => {
     event.preventDefault();
     try {
-      await updateProfile(profile);
+      await updateProfile({ name: profile.name, location: profile.location || "" });
       toast("Profile saved. Your changes are up to date.");
       await refresh();
     } catch (error) {
