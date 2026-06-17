@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft, Building2, Check, ChevronRight, FileCheck2, LogOut, Phone,
+  ArrowLeft, Building2, Check, ChevronRight, Eye, EyeOff, FileCheck2, LogOut, Mail,
   ShieldCheck, Stethoscope, UserRound,
 } from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
@@ -8,6 +8,9 @@ import {
   getApplications,
   googleLogin,
   firebasePhoneLogin,
+  login,
+  register,
+  requestPasswordReset,
   reviewApplication,
   submitApplication,
   updateProfile,
@@ -91,6 +94,119 @@ function ProfileSetup({ user, onDone, toast }) {
       <button className="pp-btn pp-btn-amber" disabled={loading || !form.name.trim() || !form.location}>
         {loading ? "Saving..." : "Let's go 🐾"}
       </button>
+    </form>
+  );
+}
+
+function PasswordField({ label, value, onChange, placeholder = "Password", autoComplete = "current-password" }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <label className="pp-field">
+      <span>{label}</span>
+      <span className="pp-password-wrap">
+        <input
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          required
+        />
+        <button type="button" className="pp-eye-btn" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"}>
+          {visible ? <EyeOff size={17} /> : <Eye size={17} />}
+        </button>
+      </span>
+    </label>
+  );
+}
+
+function EmailAuthFlow({ onAuthenticated, onBack, toast }) {
+  const [mode, setMode] = useState("login");
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+    name: "",
+    location: "",
+    accountType: "user",
+  });
+  const change = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    try {
+      const session = mode === "login"
+        ? await login({ email: form.email, password: form.password })
+        : await register({
+            email: form.email,
+            password: form.password,
+            name: form.name.trim(),
+            location: form.location,
+            accountType: form.accountType,
+            acceptTerms: true,
+            acceptPrivacy: true,
+            locationConsent: "ask",
+          });
+      onAuthenticated(session.user, session.isNewUser);
+      toast(mode === "login" ? `Welcome back, ${session.user.name}` : "Account created. Check your email for verification.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const forgotPassword = async () => {
+    if (!form.email.trim()) return toast("Enter your email first.");
+    setLoading(true);
+    try {
+      await requestPasswordReset(form.email);
+      toast("If that email exists, a reset token was sent.");
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form className="pp-auth-flow" onSubmit={submit} style={fade}>
+      <div className="pp-auth-head">
+        <AuthIcon><Mail size={19} /></AuthIcon>
+        <h1 className="pp-auth-title">{mode === "login" ? "Log in" : "Create account"}</h1>
+      </div>
+      <Field label="Email" type="email" value={form.email} onChange={change("email")} placeholder="you@example.com" autoComplete="email" required />
+      <PasswordField
+        label="Password"
+        value={form.password}
+        onChange={change("password")}
+        placeholder={mode === "login" ? "Your password" : "At least 10 characters"}
+        autoComplete={mode === "login" ? "current-password" : "new-password"}
+      />
+      {mode === "register" && <>
+        <Field label="Name" value={form.name} onChange={change("name")} placeholder="Your name" autoComplete="name" required />
+        <SelectField label="City or place in Nepal" value={form.location} onChange={change("location")}>
+          <option value="">Choose a city or place</option>
+          {nepalPlaces.map((place) => <option key={place} value={place}>{place}</option>)}
+        </SelectField>
+        <p className="pp-field" style={{ marginBottom: 8 }}>I am joining as</p>
+        <div className="pp-role-grid pp-auth-roles">
+          {[["user", UserRound, "Individual"], ["shelter", Building2, "Shelter"], ["vet", Stethoscope, "Vet"]].map(([type, Icon, label]) => (
+            <button type="button" key={type} className={"pp-role-choice" + (form.accountType === type ? " on" : "")} onClick={() => setForm((current) => ({ ...current, accountType: type }))}>
+              <Icon size={18} />{label}
+            </button>
+          ))}
+        </div>
+      </>}
+      <button className="pp-btn pp-btn-amber" disabled={loading}>
+        {loading ? "Please wait..." : mode === "login" ? "Log in" : "Create account"}
+      </button>
+      {mode === "login" && <button type="button" className="pp-link" style={{ marginTop: 12, width: "100%" }} onClick={forgotPassword}>Forgot password?</button>}
+      <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => setMode(mode === "login" ? "register" : "login")}>
+        {mode === "login" ? "Create a new account" : "I already have an account"}
+      </button>
+      <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={onBack}>← Back</button>
     </form>
   );
 }
@@ -221,7 +337,7 @@ function PhoneAuthFlow({ onAuthenticated, onBack, toast }) {
 // Landing — choose Google or Phone
 // onAuthenticated(user, isNewUser) — caller decides whether to navigate or show profile setup
 function AuthLanding({ onAuthenticated, toast }) {
-  const [mode, setMode] = useState("landing"); // landing | phone
+  const [mode, setMode] = useState("landing"); // landing | email | phone
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
   const missingGoogle = () => toast("Google sign-in is not configured yet.");
   const startPhone = () => {
@@ -243,6 +359,15 @@ function AuthLanding({ onAuthenticated, toast }) {
       <div style={fade}>
         <button className="pp-icobtn" style={{ marginBottom: 8 }} onClick={() => setMode("landing")} aria-label="Back"><ArrowLeft size={18} /></button>
         <PhoneAuthFlow onAuthenticated={onAuthenticated} onBack={() => setMode("landing")} toast={toast} />
+      </div>
+    );
+  }
+
+  if (mode === "email") {
+    return (
+      <div style={fade}>
+        <button className="pp-icobtn" style={{ marginBottom: 8 }} onClick={() => setMode("landing")} aria-label="Back"><ArrowLeft size={18} /></button>
+        <EmailAuthFlow onAuthenticated={onAuthenticated} onBack={() => setMode("landing")} toast={toast} />
       </div>
     );
   }
@@ -270,6 +395,15 @@ function AuthLanding({ onAuthenticated, toast }) {
               width="320"
             />
           </div>}
+        </button>
+
+        <button type="button" className="pp-auth-choice" onClick={() => setMode("email")}>
+          <div className="pp-auth-choice-icon phone"><Mail size={18} /></div>
+          <div>
+            <b>Log in with email</b>
+            <span>Use email and password</span>
+          </div>
+          <ChevronRight size={20} />
         </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--muted)", fontSize: 13 }}>

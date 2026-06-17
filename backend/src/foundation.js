@@ -13,7 +13,15 @@ import {
   verifyGoogleCredential,
   verifyPassword,
 } from "./auth.js";
-import { cleanEmail } from "./registration.js";
+import { sendPasswordResetEmail, sendVerificationEmail } from "./email.js";
+import {
+  accountTypes,
+  cleanEmail,
+  createOneTimeToken,
+  hashOneTimeToken,
+  validPassword,
+  validRegistrationConsent,
+} from "./registration.js";
 
 const router = express.Router();
 const roles = new Set(["user", "shelter", "vet", "admin"]);
@@ -66,6 +74,29 @@ async function authResponse(user) {
   return { token: issueToken(user), user: publicUser(user) };
 }
 
+async function createAuthToken({ userId, type, minutes }) {
+  const token = createOneTimeToken();
+  const expiresAt = new Date(Date.now() + minutes * 60 * 1000);
+  await db("auth_tokens").insert({
+    userId,
+    type,
+    tokenHash: hashOneTimeToken(token),
+    expiresAt,
+  });
+  return token;
+}
+
+async function findUsableAuthToken(token, type) {
+  if (typeof token !== "string" || token.length < 20) return null;
+  return db("auth_tokens")
+    .where({
+      type,
+      tokenHash: hashOneTimeToken(token),
+      usedAt: null,
+    })
+    .where("expiresAt", ">", new Date())
+    .first();
+}
 
 export async function ensureFoundationSchema() {
   if (!await db.schema.hasTable("users")) {
@@ -170,6 +201,58 @@ export async function ensureFoundationSchema() {
   }
 }
 
+router.post("/auth/register", authRateLimit, async (req, res) => {
+  const email = cleanEmail(req.body?.email);
+  const password = req.body?.password;
+  const name = stripHtml(req.body?.name || "");
+  const location = stripHtml(req.body?.location || "");
+  const accountType = req.body?.accountType || "user";
+
+  if (
+    !emailPattern.test(email)
+    || !validPassword(password)
+    || name.length < 2
+    || name.length > 100
+    || location.length > 200
+    || !accountTypes.has(accountType)
+    || !validRegistrationConsent(req.body || {})
+  ) {
+    return res.status(400).json({
+      error: "Enter a valid email, stronger password, name, and accept the required terms.",
+    });
+  }
+
+  const existing = await db("users").where({ email }).first();
+  if (existing) return res.status(409).json({ error: "An account already exists with this email" });
+
+  const acceptedAt = db.fn.now();
+  const id = await insertId("users", {
+    email,
+    passwordHash: await hashPassword(password),
+    name,
+    location,
+    role: "user",
+    accountType,
+    emailVerified: false,
+    termsAcceptedAt: acceptedAt,
+    privacyAcceptedAt: acceptedAt,
+    locationConsent: req.body.locationConsent,
+  });
+  const user = await db("users").where({ id }).first();
+  const token = await createAuthToken({
+    userId: user.id,
+    type: "email_verification",
+    minutes: config.authOneTimeTokenMinutes,
+  });
+  await audit(user.id, "register", "password");
+  const emailResult = await sendVerificationEmail({ to: user.email, name: user.name, token });
+  return res.status(201).json({
+    ...await authResponse(user),
+    isNewUser: false,
+    verificationEmailSent: emailResult.sent,
+  });
+});
+
 router.post("/auth/login", authRateLimit, async (req, res) => {
   const email = cleanEmail(req.body?.email);
   const password = req.body?.password;
@@ -180,6 +263,68 @@ router.post("/auth/login", authRateLimit, async (req, res) => {
   if (user.status !== "active") return res.status(403).json({ error: "Account suspended" });
   await audit(user.id, "login", "password");
   return res.json(await authResponse(user));
+});
+
+router.post("/auth/verify-email", authRateLimit, async (req, res) => {
+  const authToken = await findUsableAuthToken(req.body?.token, "email_verification");
+  if (!authToken) return res.status(400).json({ error: "Invalid or expired verification token" });
+  await db.transaction(async (trx) => {
+    await trx("auth_tokens").where({ id: authToken.id }).update({ usedAt: trx.fn.now() });
+    await trx("users").where({ id: authToken.userId }).update({
+      emailVerified: true,
+      updatedAt: trx.fn.now(),
+    });
+  });
+  const user = await db("users").where({ id: authToken.userId }).first();
+  await audit(user.id, "verify_email", "token");
+  return res.json(await authResponse(user));
+});
+
+router.post("/auth/resend-verification", authRateLimit, async (req, res) => {
+  const email = cleanEmail(req.body?.email);
+  const user = emailPattern.test(email) ? await db("users").where({ email }).first() : null;
+  if (!user || user.emailVerified) return res.json({ sent: false });
+  const token = await createAuthToken({
+    userId: user.id,
+    type: "email_verification",
+    minutes: config.authOneTimeTokenMinutes,
+  });
+  const emailResult = await sendVerificationEmail({ to: user.email, name: user.name, token });
+  await audit(user.id, "resend_verification", "email");
+  return res.json({ sent: emailResult.sent });
+});
+
+router.post("/auth/forgot-password", authRateLimit, async (req, res) => {
+  const email = cleanEmail(req.body?.email);
+  const user = emailPattern.test(email) ? await db("users").where({ email }).first() : null;
+  if (user?.passwordHash && user.status === "active") {
+    const token = await createAuthToken({
+      userId: user.id,
+      type: "password_reset",
+      minutes: config.authOneTimeTokenMinutes,
+    });
+    await sendPasswordResetEmail({ to: user.email, name: user.name, token });
+    await audit(user.id, "password_reset_request", "email");
+  }
+  return res.json({ ok: true });
+});
+
+router.post("/auth/reset-password", authRateLimit, async (req, res) => {
+  const authToken = await findUsableAuthToken(req.body?.token, "password_reset");
+  if (!authToken) return res.status(400).json({ error: "Invalid or expired reset token" });
+  if (!validPassword(req.body?.password)) {
+    return res.status(400).json({ error: "Password must be at least 10 characters and include a number." });
+  }
+  await db.transaction(async (trx) => {
+    await trx("auth_tokens").where({ id: authToken.id }).update({ usedAt: trx.fn.now() });
+    await trx("users").where({ id: authToken.userId }).update({
+      passwordHash: await hashPassword(req.body.password),
+      updatedAt: trx.fn.now(),
+    });
+  });
+  const user = await db("users").where({ id: authToken.userId }).first();
+  await audit(user.id, "password_reset", "token");
+  return res.json({ ok: true });
 });
 
 router.post("/auth/google", authRateLimit, async (req, res) => {
