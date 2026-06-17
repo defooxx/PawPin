@@ -6,12 +6,17 @@ let adminAuth = null;
 
 function serviceAccount() {
   if (config.firebase.serviceAccountJson) {
-    const parsed = JSON.parse(config.firebase.serviceAccountJson);
-    return {
-      projectId: parsed.project_id,
-      clientEmail: parsed.client_email,
-      privateKey: parsed.private_key,
-    };
+    try {
+      const parsed = JSON.parse(config.firebase.serviceAccountJson);
+      return {
+        projectId: parsed.project_id,
+        clientEmail: parsed.client_email,
+        privateKey: parsed.private_key,
+      };
+    } catch (error) {
+      console.warn(`Firebase phone auth disabled: FIREBASE_SERVICE_ACCOUNT_JSON is invalid JSON (${error.message})`);
+      return null;
+    }
   }
   if (config.firebase.projectId && config.firebase.clientEmail && config.firebase.privateKey) {
     return {
@@ -26,12 +31,16 @@ function serviceAccount() {
 const credential = serviceAccount();
 
 if (credential) {
-  if (!getApps().length) {
-    initializeApp({
-      credential: cert(credential),
-    });
+  try {
+    if (!getApps().length) {
+      initializeApp({
+        credential: cert(credential),
+      });
+    }
+    adminAuth = getAuth();
+  } catch (error) {
+    console.warn(`Firebase phone auth disabled: ${error.message}`);
   }
-  adminAuth = getAuth();
 }
 
 export { adminAuth };
