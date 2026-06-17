@@ -194,7 +194,6 @@ function PhoneAuthFlow({ onAuthenticated, onBack, toast }) {
       <div className="pp-auth-head">
         <AuthIcon>📱</AuthIcon>
         <h1 className="pp-auth-title">Your number</h1>
-        <p className="pp-auth-sub">We'll text a one-time code. Works with NTC and Ncell.</p>
       </div>
       <label className="pp-phone-entry">
         <span>Nepal mobile number</span>
@@ -210,9 +209,8 @@ function PhoneAuthFlow({ onAuthenticated, onBack, toast }) {
           />
         </div>
       </label>
-      <div className="pp-auth-note">🔒 A verified Nepal number is required to alert shelters — keeps fake reports out.</div>
       <div id="recaptcha-container" />
-      <button className="pp-btn pp-btn-amber" disabled={loading}>
+      <button className="pp-btn pp-btn-amber" style={{ marginTop: 18 }} disabled={loading}>
         {loading ? "Sending OTP..." : "Send code →"}
       </button>
       <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={onBack}>← Back</button>
