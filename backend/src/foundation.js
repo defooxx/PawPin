@@ -218,7 +218,7 @@ router.post("/auth/register", authRateLimit, async (req, res) => {
     return res.status(400).json({ error: "Accept the Terms and Privacy Policy and choose a location preference" });
   }
   try {
-    const acceptedAt = db.fn.now();
+    const acceptedAt = new Date();
     const id = await insertId("users", {
       email,
       passwordHash: await hashPassword(password),
@@ -240,6 +240,7 @@ router.post("/auth/register", authRateLimit, async (req, res) => {
     });
   } catch (error) {
     if (/unique|duplicate/i.test(error.message)) return res.status(409).json({ error: "An account already exists for this email" });
+    console.error("Registration failed:", error.message);
     throw error;
   }
 });
