@@ -3,25 +3,17 @@ import { rateLimit } from "express-rate-limit";
 import { v2 as cloudinary } from "cloudinary";
 import db from "./db.js";
 import { config } from "./config.js";
-import { sendPasswordResetEmail, sendVerificationEmail } from "./email.js";
+import { adminAuth } from "./firebase-admin.js";
 import {
   hashPassword,
   issueToken,
   publicUser,
   requireAuth,
   requireRole,
-  requireVerifiedEmail,
   verifyGoogleCredential,
   verifyPassword,
 } from "./auth.js";
-import {
-  accountTypes,
-  cleanEmail,
-  createOneTimeToken,
-  hashOneTimeToken,
-  validPassword,
-  validRegistrationConsent,
-} from "./registration.js";
+import { cleanEmail } from "./registration.js";
 
 const router = express.Router();
 const roles = new Set(["user", "shelter", "vet", "admin"]);
@@ -74,80 +66,6 @@ async function authResponse(user) {
   return { token: issueToken(user), user: publicUser(user) };
 }
 
-async function createRegisteredUser({ email, password, name, location, accountType, locationConsent }) {
-  const common = {
-    email,
-    passwordHash: await hashPassword(password),
-    name: stripHtml(name),
-    location: stripHtml(location),
-    role: "user",
-    pointsBalance: 0,
-    status: "active",
-    emailVerified: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-  try {
-    const acceptedAt = new Date();
-    return await insertId("users", {
-      ...common,
-      accountType,
-      termsAcceptedAt: acceptedAt,
-      privacyAcceptedAt: acceptedAt,
-      locationConsent,
-    });
-  } catch (error) {
-    if (!/column|accountType|termsAcceptedAt|privacyAcceptedAt|locationConsent/i.test(error.message)) throw error;
-    console.error("Registration consent columns unavailable, falling back to core user insert:", error.message);
-    return insertId("users", common);
-  }
-}
-
-async function createAuthToken(userId, type) {
-  const token = createOneTimeToken();
-  await db("auth_tokens").where({ userId, type }).whereNull("usedAt").update({ usedAt: db.fn.now() });
-  await db("auth_tokens").insert({
-    userId,
-    type,
-    tokenHash: hashOneTimeToken(token),
-    expiresAt: new Date(Date.now() + config.authOneTimeTokenMinutes * 60 * 1000),
-  });
-  return token;
-}
-
-async function consumeAuthToken(token, type) {
-  if (typeof token !== "string" || token.length < 32 || token.length > 256) return null;
-  const record = await db("auth_tokens").where({ tokenHash: hashOneTimeToken(token), type }).whereNull("usedAt").first();
-  if (!record || new Date(record.expiresAt).getTime() <= Date.now()) return null;
-  await db("auth_tokens").where({ id: record.id }).update({ usedAt: db.fn.now() });
-  return record;
-}
-
-function developmentToken(key, token) {
-  return config.exposeAuthTokens ? { [key]: token } : {};
-}
-
-async function sendVerificationIfPossible(user, token) {
-  if (!token) return false;
-  try {
-    const result = await sendVerificationEmail({ to: user.email, name: user.name, token });
-    return result.sent;
-  } catch (error) {
-    console.error("Verification email failed:", error.message);
-    return false;
-  }
-}
-
-async function sendResetIfPossible(user, token) {
-  if (!token) return false;
-  try {
-    const result = await sendPasswordResetEmail({ to: user.email, name: user.name, token });
-    return result.sent;
-  } catch (error) {
-    console.error("Password reset email failed:", error.message);
-    return false;
-  }
-}
 
 export async function ensureFoundationSchema() {
   if (!await db.schema.hasTable("users")) {
@@ -177,6 +95,8 @@ export async function ensureFoundationSchema() {
     ["termsAcceptedAt", (table) => table.timestamp("termsAcceptedAt")],
     ["privacyAcceptedAt", (table) => table.timestamp("privacyAcceptedAt")],
     ["locationConsent", (table) => table.string("locationConsent", 20).notNullable().defaultTo("ask")],
+    ["phoneNumber", (table) => table.string("phoneNumber", 20).unique()],
+    ["phoneVerified", (table) => table.boolean("phoneVerified").notNullable().defaultTo(false)],
   ];
   for (const [column, addColumn] of userColumns) {
     if (!await db.schema.hasColumn("users", column)) await db.schema.alterTable("users", addColumn);
@@ -250,107 +170,6 @@ export async function ensureFoundationSchema() {
   }
 }
 
-router.post("/auth/register", authRateLimit, async (req, res) => {
-  const email = cleanEmail(req.body?.email);
-  const {
-    password,
-    confirmPassword,
-    name,
-    location = "",
-    accountType = "user",
-    acceptTerms,
-    acceptPrivacy,
-    locationConsent = "ask",
-  } = req.body || {};
-  if (!emailPattern.test(email) || !validPassword(password) || password !== confirmPassword || !validProfile({ name, location })) {
-    return res.status(400).json({ error: "Use a valid email, name, and password with at least 10 characters including a letter and number" });
-  }
-  if (!accountTypes.has(accountType)) return res.status(400).json({ error: "Choose a valid account type" });
-  if (!validRegistrationConsent({ acceptTerms, acceptPrivacy, locationConsent })) {
-    return res.status(400).json({ error: "Accept the Terms and Privacy Policy and choose a location preference" });
-  }
-  try {
-    const id = await createRegisteredUser({ email, password, name, location, accountType, locationConsent });
-    const user = await db("users").where({ id }).first();
-    let verificationToken = null;
-    try {
-      verificationToken = await createAuthToken(id, "email_verification");
-    } catch (error) {
-      console.error("Registration verification token failed:", error.message);
-    }
-    const verificationEmailSent = await sendVerificationIfPossible(user, verificationToken);
-    try {
-      await audit(id, "register", "password");
-    } catch (error) {
-      console.error("Registration audit failed:", error.message);
-    }
-    return res.status(201).json({
-      ...await authResponse(user),
-      verificationRequired: Boolean(verificationToken),
-      verificationEmailSent,
-      ...developmentToken("developmentVerificationToken", verificationToken),
-    });
-  } catch (error) {
-    if (/unique|duplicate/i.test(error.message)) return res.status(409).json({ error: "An account already exists for this email" });
-    console.error("Registration failed:", {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-      constraint: error.constraint,
-      column: error.column,
-      table: error.table,
-    });
-    throw error;
-  }
-});
-
-router.post("/auth/verify-email", authRateLimit, async (req, res) => {
-  const record = await consumeAuthToken(req.body?.token, "email_verification");
-  if (!record) return res.status(400).json({ error: "Verification link is invalid or expired" });
-  await db("users").where({ id: record.userId }).update({ emailVerified: true, updatedAt: db.fn.now() });
-  const user = await db("users").where({ id: record.userId }).first();
-  await audit(user.id, "email_verified");
-  return res.json(await authResponse(user));
-});
-
-router.post("/auth/resend-verification", authRateLimit, async (req, res) => {
-  const user = await db("users").where({ email: cleanEmail(req.body?.email) }).first();
-  let token;
-  let verificationEmailSent = false;
-  if (user && !user.emailVerified && user.status === "active") token = await createAuthToken(user.id, "email_verification");
-  if (user && token) verificationEmailSent = await sendVerificationIfPossible(user, token);
-  return res.json({
-    message: "If the account needs verification, a new verification email has been sent.",
-    verificationEmailSent,
-    ...developmentToken("developmentVerificationToken", token),
-  });
-});
-
-router.post("/auth/forgot-password", authRateLimit, async (req, res) => {
-  const user = await db("users").where({ email: cleanEmail(req.body?.email) }).first();
-  let token;
-  let resetEmailSent = false;
-  if (user?.passwordHash && user.status === "active") token = await createAuthToken(user.id, "password_reset");
-  if (user && token) resetEmailSent = await sendResetIfPossible(user, token);
-  return res.json({
-    message: "If an account exists for that email, password reset instructions have been sent.",
-    resetEmailSent,
-    ...developmentToken("developmentResetToken", token),
-  });
-});
-
-router.post("/auth/reset-password", authRateLimit, async (req, res) => {
-  const { token, password, confirmPassword } = req.body || {};
-  if (!validPassword(password) || password !== confirmPassword) {
-    return res.status(400).json({ error: "Passwords must match and contain at least 10 characters including a letter and number" });
-  }
-  const record = await consumeAuthToken(token, "password_reset");
-  if (!record) return res.status(400).json({ error: "Reset link is invalid or expired" });
-  await db("users").where({ id: record.userId }).update({ passwordHash: await hashPassword(password), updatedAt: db.fn.now() });
-  await audit(record.userId, "password_reset");
-  return res.json({ message: "Password updated. You can now sign in." });
-});
-
 router.post("/auth/login", authRateLimit, async (req, res) => {
   const email = cleanEmail(req.body?.email);
   const password = req.body?.password;
@@ -369,7 +188,9 @@ router.post("/auth/google", authRateLimit, async (req, res) => {
     const email = cleanEmail(payload.email);
     if (!payload.email_verified || !emailPattern.test(email)) return res.status(401).json({ error: "Google email is not verified" });
     let user = await db("users").where({ email }).first();
+    let isNewUser = false;
     if (!user) {
+      isNewUser = true;
       const acceptedAt = db.fn.now();
       const id = await insertId("users", {
         email,
@@ -388,10 +209,53 @@ router.post("/auth/google", authRateLimit, async (req, res) => {
     }
     if (user.status !== "active") return res.status(403).json({ error: "Account suspended" });
     await audit(user.id, "login", "google");
-    return res.json(await authResponse(user));
+    return res.json({ ...await authResponse(user), isNewUser });
   } catch (error) {
     console.error("Google sign-in failed:", error.message);
     return res.status(401).json({ error: "Google sign-in failed. Please try again." });
+  }
+});
+
+router.post("/auth/firebase-phone", authRateLimit, async (req, res) => {
+  if (!adminAuth) return res.status(503).json({ error: "Phone auth not configured" });
+  const { idToken, name, location } = req.body || {};
+  if (typeof idToken !== "string" || !idToken) return res.status(400).json({ error: "Missing Firebase ID token" });
+  try {
+    const decoded = await adminAuth.verifyIdToken(idToken);
+    const phoneNumber = decoded.phone_number;
+    if (!phoneNumber) return res.status(400).json({ error: "Token does not contain a phone number" });
+
+    let user = await db("users").where({ phoneNumber }).first();
+    let isNewUser = false;
+
+    if (!user) {
+      isNewUser = true;
+      const syntheticEmail = `phone__${phoneNumber.replace(/\D/g, "")}@pawpin.internal`;
+      const acceptedAt = db.fn.now();
+      const id = await insertId("users", {
+        email: syntheticEmail,
+        phoneNumber,
+        phoneVerified: true,
+        name: name ? stripHtml(name) : phoneNumber,
+        location: location ? stripHtml(location) : "",
+        role: "user",
+        emailVerified: false,
+        termsAcceptedAt: acceptedAt,
+        privacyAcceptedAt: acceptedAt,
+        locationConsent: "ask",
+      });
+      user = await db("users").where({ id }).first();
+    } else if (!user.phoneVerified) {
+      await db("users").where({ id: user.id }).update({ phoneVerified: true, updatedAt: db.fn.now() });
+      user = await db("users").where({ id: user.id }).first();
+    }
+
+    if (user.status !== "active") return res.status(403).json({ error: "Account suspended" });
+    await audit(user.id, "login", "firebase_phone");
+    return res.json({ ...await authResponse(user), isNewUser });
+  } catch (error) {
+    console.error("Firebase phone auth failed:", error.message);
+    return res.status(401).json({ error: "Phone verification failed. Please try again." });
   }
 });
 
@@ -447,7 +311,7 @@ router.post("/me/photo", requireAuth, async (req, res) => {
   return res.status(201).json({ user: publicUser(user), url: uploaded.secure_url });
 });
 
-router.post("/applications/documents", requireAuth, requireVerifiedEmail, async (req, res) => {
+router.post("/applications/documents", requireAuth, async (req, res) => {
   const dataUrl = req.body?.dataUrl;
   const match = typeof dataUrl === "string"
     ? /^data:(application\/pdf|image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(dataUrl)
@@ -470,7 +334,7 @@ router.post("/applications/documents", requireAuth, requireVerifiedEmail, async 
   return res.status(201).json({ url: uploaded.secure_url });
 });
 
-router.post("/applications", requireAuth, requireVerifiedEmail, async (req, res) => {
+router.post("/applications", requireAuth, async (req, res) => {
   const { type, organizationName, registrationNumber, address, documentUrls } = req.body || {};
   const valid = applicationTypes.has(type)
     && typeof organizationName === "string" && organizationName.trim().length >= 2 && organizationName.length <= 150

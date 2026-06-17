@@ -1,25 +1,28 @@
-import { useEffect, useState } from "react";
-import { ArrowLeft, Building2, Check, Eye, EyeOff, FileCheck2, KeyRound, LogOut, MailCheck, ShieldCheck, Stethoscope, UserRound } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft, Building2, Check, FileCheck2, LogOut, Phone,
+  ShieldCheck, Stethoscope, UserRound,
+} from "lucide-react";
 import { GoogleLogin } from "@react-oauth/google";
 import {
   getApplications,
   googleLogin,
-  login,
-  register,
-  requestPasswordReset,
-  resendVerification,
-  resetPassword,
+  firebasePhoneLogin,
   reviewApplication,
   submitApplication,
   updateProfile,
   uploadApplicationDocument,
   uploadProfilePhoto,
-  verifyEmail,
 } from "../services/auth.js";
+import { auth, RecaptchaVerifier, signInWithPhoneNumber } from "../services/firebase.js";
 import { fade } from "../data.js";
 
 function Field({ label, ...props }) {
   return <label className="pp-field"><span>{label}</span><input {...props} /></label>;
+}
+
+function SelectField({ label, children, ...props }) {
+  return <label className="pp-field"><span>{label}</span><select {...props}>{children}</select></label>;
 }
 
 const nepalPlaces = [
@@ -34,166 +37,216 @@ const nepalPlaces = [
   "Udayapur", "Gaighat", "Inaruwa", "Urlabari", "Letang", "Godawari", "Tokha", "Budhanilkantha", "Chandragiri", "Tarakeshwar",
 ];
 
-function SelectField({ label, children, ...props }) {
-  return <label className="pp-field"><span>{label}</span><select {...props}>{children}</select></label>;
-}
-
-function PasswordField({ label, value, onChange, ...props }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <label className="pp-field">
-      <span>{label}</span>
-      <span className="pp-password-wrap">
-        <input {...props} type={visible ? "text" : "password"} value={value} onChange={onChange} />
-        <button type="button" className="pp-eye-btn" onClick={() => setVisible((current) => !current)} aria-label={visible ? "Hide password" : "Show password"}>
-          {visible ? <EyeOff size={16} /> : <Eye size={16} />}
-        </button>
-      </span>
-    </label>
-  );
-}
-
-function AuthForm({ onAuthenticated, onDone, toast }) {
-  const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({
-    name: "", email: "", password: "", confirmPassword: "", location: "", accountType: "user",
-    acceptTerms: false, acceptPrivacy: false, locationConsent: "ask", token: "",
-  });
+// Profile setup — shown after first Google or phone sign-in when name/location is missing
+function ProfileSetup({ user, onDone, toast }) {
+  const [form, setForm] = useState({ name: user.name || "", location: user.location || "" });
   const [loading, setLoading] = useState(false);
-  const change = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
-  const check = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.checked }));
-  const passwordChecks = [
-    ["10+ characters", form.password.length >= 10],
-    ["A letter", /[A-Za-z]/.test(form.password)],
-    ["A number", /\d/.test(form.password)],
-    ["Passwords match", Boolean(form.password) && form.password === form.confirmPassword],
-  ];
-  const finishAuth = (user) => {
-    onAuthenticated(user);
-    onDone();
-  };
+  const change = (key) => (event) => setForm((cur) => ({ ...cur, [key]: event.target.value }));
 
   const submit = async (event) => {
     event.preventDefault();
+    if (!form.name.trim() || !form.location) return toast("Please enter your name and choose a city.");
     setLoading(true);
     try {
-      if (mode === "verify") {
-        const session = await verifyEmail(form.token);
-        finishAuth(session.user);
-        toast("Email verified. Welcome to PawPin.");
-      } else if (mode === "forgot") {
-        const result = await requestPasswordReset(form.email);
-        setForm((current) => ({ ...current, token: result.developmentResetToken || "" }));
-        setMode("reset");
-        toast(result.message);
-      } else if (mode === "reset") {
-        await resetPassword({ token: form.token, password: form.password, confirmPassword: form.confirmPassword });
-        setMode("login");
-        toast("Password updated. Sign in with your new password.");
-      } else {
-        const session = mode === "login" ? await login(form) : await register(form);
-        finishAuth(session.user);
-        if (mode === "register" && session.verificationRequired) {
-          setForm((current) => ({ ...current, token: session.developmentVerificationToken || "" }));
-          toast(session.verificationEmailSent ? "Account created. Check your email to verify when you can." : "Account created. You can verify your email from your profile.");
-        } else {
-          toast(`Welcome${session.user.name ? `, ${session.user.name}` : ""}`);
-        }
-      }
+      const result = await updateProfile({ name: form.name.trim(), location: form.location });
+      onDone(result.user);
     } catch (error) {
       toast(error.message);
     } finally {
       setLoading(false);
     }
   };
-
-  const finishGoogleLogin = async (credential) => {
-    try {
-      const session = await googleLogin(credential);
-      finishAuth(session.user);
-      toast(`Welcome, ${session.user.name}`);
-    } catch (error) {
-      toast(error.message);
-    }
-  };
-
-  const resend = async () => {
-    setLoading(true);
-    try {
-      const result = await resendVerification(form.email);
-      setForm((current) => ({ ...current, token: result.developmentVerificationToken || current.token }));
-      toast(result.message);
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (mode === "verify") {
-    return (
-      <form onSubmit={submit} style={fade}>
-        <div className="pp-account-hero"><MailCheck size={34} color="var(--sage)" /><h1 className="pp-h1">Verify your email</h1><p className="pp-sub">We emailed a one-time token to {form.email}. Paste it here to finish verification.</p></div>
-        <Field label="Verification token" value={form.token} onChange={change("token")} required />
-        <button className="pp-btn pp-btn-amber" disabled={loading}>Verify email</button>
-        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={resend} disabled={loading}>Send a new token</button>
-      </form>
-    );
-  }
-
-  if (mode === "forgot" || mode === "reset") {
-    return (
-      <form onSubmit={submit} style={fade}>
-        <div className="pp-account-hero"><KeyRound size={34} color="var(--amber-deep)" /><h1 className="pp-h1">{mode === "forgot" ? "Reset your password" : "Choose a new password"}</h1></div>
-        {mode === "forgot" ? <Field label="Email" type="email" value={form.email} onChange={change("email")} required /> : <>
-          <Field label="Reset token" value={form.token} onChange={change("token")} required />
-          <PasswordField label="New password" value={form.password} onChange={change("password")} required />
-          <PasswordField label="Confirm password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
-        </>}
-        <button className="pp-btn pp-btn-amber" disabled={loading}>{mode === "forgot" ? "Continue" : "Update password"}</button>
-        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => setMode("login")}>Back to sign in</button>
-      </form>
-    );
-  }
 
   return (
     <form onSubmit={submit} style={fade}>
       <div className="pp-account-hero">
-        <UserRound size={30} />
-        <h1 className="pp-h1">{mode === "login" ? "Welcome back" : "Join PawPin"}</h1>
-        <p className="pp-sub">{mode === "login" ? "Sign in to see your reports and profile." : "Create a profile to build your rescue history."}</p>
+        <div style={{ fontSize: 36 }}>🐾</div>
+        <h1 className="pp-h1">Almost there!</h1>
+        <p className="pp-sub">Tell us a little about yourself so we can show you the right animals near you.</p>
       </div>
-      {mode === "register" && <>
-        <p className="pp-field">I am joining as</p>
-        <div className="pp-role-grid">
-          {[["user", UserRound, "Individual"], ["shelter", Building2, "Shelter"], ["vet", Stethoscope, "Veterinarian"]].map(([type, Icon, label]) => (
-            <button type="button" key={type} className={"pp-role-choice" + (form.accountType === type ? " on" : "")} onClick={() => setForm((current) => ({ ...current, accountType: type }))}><Icon size={18} />{label}</button>
-          ))}
-        </div>
-        <Field label="Name" value={form.name} onChange={change("name")} required />
-      </>}
-      <Field label="Email" type="email" value={form.email} onChange={change("email")} required />
-      <PasswordField label="Password" value={form.password} onChange={change("password")} minLength={10} required />
-      {mode === "register" && <>
-        <PasswordField label="Confirm password" value={form.confirmPassword} onChange={change("confirmPassword")} required />
-        <div className="pp-password-checks">{passwordChecks.map(([label, valid]) => <span className={valid ? "ok" : ""} key={label}><Check size={12} />{label}</span>)}</div>
-        <SelectField label="City or place in Nepal" value={form.location} onChange={change("location")}>
-          <option value="">Choose a city or place</option>
-          {nepalPlaces.map((place) => <option key={place} value={place}>{place}</option>)}
-        </SelectField>
-        <SelectField label="Location preference" value={form.locationConsent} onChange={change("locationConsent")}><option value="ask">Ask every time</option><option value="once">Allow once when requested</option><option value="while_using">Allow while using PawPin</option></SelectField>
-        <label className="pp-check"><input type="checkbox" checked={form.acceptTerms} onChange={check("acceptTerms")} /> I accept the Terms of Service.</label>
-        <label className="pp-check"><input type="checkbox" checked={form.acceptPrivacy} onChange={check("acceptPrivacy")} /> I accept the Privacy Policy and understand location is only used with permission.</label>
-      </>}
-      <button className="pp-btn pp-btn-amber" disabled={loading}>{loading ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}</button>
-      {mode === "login" && <button type="button" className="pp-link" style={{ width: "100%", marginTop: 12 }} onClick={() => setMode("forgot")}>Forgot password?</button>}
-      <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => setMode(mode === "login" ? "register" : "login")}>
-        {mode === "login" ? "Need an account? Register" : "Already registered? Sign in"}
+      <Field label="Your name" value={form.name} onChange={change("name")} placeholder="e.g. Priya Sharma" required />
+      <SelectField label="Your city in Nepal" value={form.location} onChange={change("location")} required>
+        <option value="">Choose a city or place</option>
+        {nepalPlaces.map((place) => <option key={place} value={place}>{place}</option>)}
+      </SelectField>
+      <button className="pp-btn pp-btn-amber" disabled={loading || !form.name.trim() || !form.location}>
+        {loading ? "Saving..." : "Save and continue"}
       </button>
-      {import.meta.env.VITE_GOOGLE_CLIENT_ID
-        ? <div style={{ display: "grid", placeItems: "center", marginTop: 12 }}><GoogleLogin onSuccess={(response) => finishGoogleLogin(response.credential)} onError={() => toast("Google sign-in failed")} /><p className="pp-sub" style={{ fontSize: 10.5, textAlign: "center" }}>By continuing with Google, you accept PawPin's Terms and Privacy Policy. Location remains ask-first.</p></div>
-        : <p className="pp-sub" style={{ fontSize: 11.5, textAlign: "center", marginTop: 12 }}>Google sign-in becomes available when its client ID is configured.</p>}
     </form>
+  );
+}
+
+// Phone OTP flow — onAuthenticated(user, isNewUser) called when OTP confirmed
+function PhoneAuthFlow({ onAuthenticated, toast }) {
+  const [step, setStep] = useState("phone"); // phone | otp
+  const [phoneLocal, setPhoneLocal] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const confirmationRef = useRef(null);
+  const recaptchaRef = useRef(null);
+
+  // Render invisible reCAPTCHA
+  useEffect(() => {
+    if (!recaptchaRef.current) {
+      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", { size: "invisible" });
+    }
+    return () => {
+      try { recaptchaRef.current?.clear(); } catch { /* ignore */ }
+      recaptchaRef.current = null;
+    };
+  }, []);
+
+  const sendOtp = async (event) => {
+    event.preventDefault();
+    const digits = phoneLocal.replace(/\D/g, "");
+    if (digits.length < 9 || digits.length > 10) return toast("Enter a valid Nepal phone number (9 or 10 digits).");
+    const fullNumber = `+977${digits.replace(/^977/, "")}`;
+    setLoading(true);
+    try {
+      const confirmation = await signInWithPhoneNumber(auth, fullNumber, recaptchaRef.current);
+      confirmationRef.current = confirmation;
+      setStep("otp");
+      toast("OTP sent to " + fullNumber);
+    } catch (error) {
+      console.error("Send OTP error:", error);
+      toast(error.message?.includes("too-many-requests") ? "Too many attempts. Please wait and try again." : "Could not send OTP. Check the number and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtp = async (event) => {
+    event.preventDefault();
+    if (!otp.trim() || otp.length < 6) return toast("Enter the 6-digit OTP.");
+    setLoading(true);
+    try {
+      const result = await confirmationRef.current.confirm(otp.trim());
+      const idToken = await result.user.getIdToken();
+      const session = await firebasePhoneLogin(idToken);
+      onAuthenticated(session.user, session.isNewUser);
+    } catch (error) {
+      console.error("Verify OTP error:", error);
+      toast(error.message?.includes("invalid-verification-code") ? "Incorrect OTP. Please try again." : "Verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (step === "otp") {
+    return (
+      <form onSubmit={verifyOtp} style={fade}>
+        <div className="pp-account-hero">
+          <Phone size={34} color="var(--sage)" />
+          <h1 className="pp-h1">Enter the OTP</h1>
+          <p className="pp-sub">We sent a 6-digit code to your phone. Enter it below.</p>
+        </div>
+        <Field
+          label="6-digit OTP"
+          value={otp}
+          onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          required
+          placeholder="123456"
+        />
+        <button className="pp-btn pp-btn-amber" disabled={loading || otp.length < 6}>
+          {loading ? "Verifying..." : "Verify OTP"}
+        </button>
+        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => { setStep("phone"); setOtp(""); }}>
+          Change number
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form onSubmit={sendOtp} style={fade}>
+      <div className="pp-account-hero">
+        <Phone size={34} color="var(--sage)" />
+        <h1 className="pp-h1">Sign in with phone</h1>
+        <p className="pp-sub">We'll send a one-time code to your Nepal number via SMS.</p>
+      </div>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+        <label className="pp-field" style={{ flex: "0 0 auto" }}>
+          <span>Country</span>
+          <input value="+977 🇳🇵" readOnly style={{ width: 90 }} />
+        </label>
+        <label className="pp-field" style={{ flex: 1 }}>
+          <span>Phone number</span>
+          <input
+            type="tel"
+            inputMode="numeric"
+            value={phoneLocal}
+            onChange={(event) => setPhoneLocal(event.target.value.replace(/[^\d\s\-]/g, ""))}
+            placeholder="98xxxxxxxx"
+            required
+          />
+        </label>
+      </div>
+      <div id="recaptcha-container" />
+      <button className="pp-btn pp-btn-amber" disabled={loading}>
+        {loading ? "Sending OTP..." : "Send OTP"}
+      </button>
+    </form>
+  );
+}
+
+// Landing — choose Google or Phone
+// onAuthenticated(user, isNewUser) — caller decides whether to navigate or show profile setup
+function AuthLanding({ onAuthenticated, toast }) {
+  const [mode, setMode] = useState("landing"); // landing | phone
+
+  const finishGoogleLogin = async (credential) => {
+    try {
+      const session = await googleLogin(credential);
+      onAuthenticated(session.user, session.isNewUser);
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+
+  if (mode === "phone") {
+    return (
+      <div style={fade}>
+        <button className="pp-icobtn" style={{ marginBottom: 8 }} onClick={() => setMode("landing")} aria-label="Back"><ArrowLeft size={18} /></button>
+        <PhoneAuthFlow onAuthenticated={onAuthenticated} toast={toast} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...fade, textAlign: "center" }}>
+      <div className="pp-account-hero">
+        <div style={{ fontSize: 48 }}>🐾</div>
+        <h1 className="pp-h1">Welcome to PawPin</h1>
+        <p className="pp-sub">Nepal's animal rescue community. Sign in to track your reports, find shelters, and help animals near you.</p>
+      </div>
+
+      <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
+        <div style={{ display: "grid", placeItems: "center" }}>
+          <GoogleLogin
+            onSuccess={(response) => finishGoogleLogin(response.credential)}
+            onError={() => toast("Google sign-in failed")}
+            width="280"
+          />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--muted)", fontSize: 13 }}>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          or
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+        </div>
+
+        <button className="pp-btn pp-btn-ghost" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => setMode("phone")}>
+          <Phone size={17} />
+          Sign in with phone number
+        </button>
+      </div>
+
+      <p className="pp-sub" style={{ fontSize: 11, marginTop: 20 }}>
+        By signing in you accept PawPin's Terms of Service and Privacy Policy. Your location is only used with your permission.
+      </p>
+    </div>
   );
 }
 
@@ -300,46 +353,58 @@ function AdminPanel({ toast }) {
   );
 }
 
-function VerificationNotice({ email, refresh, toast }) {
-  const [loading, setLoading] = useState(false);
-  const resend = async () => {
-    setLoading(true);
-    try {
-      const result = await resendVerification(email);
-      toast(result.message);
-    } catch (error) {
-      toast(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-  return (
-    <div className="pp-notice">
-      <MailCheck size={19} />
-      <div style={{ flex: 1 }}>
-        <b>Verify your email</b>
-        <p className="pp-sub">We sent a verification email to {email}. Open it and use the token there to finish verification.</p>
-        <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
-          <button className="pp-link" onClick={resend} disabled={loading}>{loading ? "Sending..." : "Resend email"}</button>
-          <button className="pp-link" onClick={refresh} disabled={loading}>I verified it</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh, toast }) {
   const [profile, setProfile] = useState(data?.user || null);
+  const [pendingNewUser, setPendingNewUser] = useState(null); // user object awaiting profile setup
   const [photoUploading, setPhotoUploading] = useState(false);
-  useEffect(() => setProfile(data?.user || null), [data]);
 
-  if (!profile) return <div><button className="pp-icobtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button><AuthForm onAuthenticated={onAuthenticated} onDone={onBack} toast={toast} /></div>;
+  useEffect(() => {
+    // Only update profile from data if not in the middle of profile setup
+    if (!pendingNewUser) setProfile(data?.user || null);
+  }, [data, pendingNewUser]);
+
+  // Called after sign-in — decide whether to go home or show profile setup
+  const handleAuthenticated = (user, isNewUser) => {
+    onAuthenticated(user);
+    if (isNewUser || !user.location || user.name === user.phoneNumber) {
+      setPendingNewUser(user);
+    } else {
+      onBack(); // go home
+      toast(`Welcome back, ${user.name} 🐾`);
+    }
+  };
+
+  const finishProfileSetup = (updatedUser) => {
+    setPendingNewUser(null);
+    onAuthenticated(updatedUser);
+    refresh();
+    onBack(); // go home after profile setup
+    toast(`Welcome to PawPin, ${updatedUser.name}! 🐾`);
+  };
+
+  // Show profile setup for new users
+  if (pendingNewUser) {
+    return (
+      <div>
+        <ProfileSetup user={pendingNewUser} onDone={finishProfileSetup} toast={toast} />
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div>
+        <button className="pp-icobtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
+        <AuthLanding onAuthenticated={handleAuthenticated} toast={toast} />
+      </div>
+    );
+  }
 
   const save = async (event) => {
     event.preventDefault();
     try {
       await updateProfile({ name: profile.name, location: profile.location || "" });
-      toast("Profile saved. Your changes are up to date.");
+      toast("Profile saved.");
       await refresh();
     } catch (error) {
       toast(error.message);
@@ -359,7 +424,7 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
       });
       const result = await uploadProfilePhoto(dataUrl);
       setProfile(result.user);
-      toast("Profile photo uploaded.");
+      toast("Profile photo updated.");
       await refresh();
     } catch (error) {
       toast(error.message);
@@ -368,6 +433,8 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
       event.target.value = "";
     }
   };
+
+  const contactInfo = profile.email || (profile.phoneNumber ? `📱 ${profile.phoneNumber}` : null);
 
   return (
     <div style={fade}>
@@ -378,26 +445,35 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
       <div className="pp-account-hero">
         <div className="pp-avatar">{profile.photoUrl ? <img src={profile.photoUrl} alt="" /> : <UserRound size={30} />}</div>
         <h1 className="pp-h1">{profile.name}</h1>
+        {contactInfo && <p className="pp-sub" style={{ fontSize: 12 }}>{contactInfo}</p>}
         <span className="pp-pill" style={{ background: "var(--sage-soft)", color: "var(--sage)" }}><ShieldCheck size={13} />{profile.role}</span>
       </div>
-      {!profile.emailVerified && <VerificationNotice email={profile.email} refresh={refresh} toast={toast} />}
+
       <form onSubmit={save}>
         <Field label="Name" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} required />
-        <Field label="Location" value={profile.location || ""} onChange={(event) => setProfile({ ...profile, location: event.target.value })} />
+        <SelectField label="City or place in Nepal" value={profile.location || ""} onChange={(event) => setProfile({ ...profile, location: event.target.value })}>
+          <option value="">Choose a city or place</option>
+          {nepalPlaces.map((place) => <option key={place} value={place}>{place}</option>)}
+        </SelectField>
         <label className="pp-upload">
-          <UserRound size={18} /> {photoUploading ? "Uploading profile photo..." : profile.photoUrl ? "Change profile photo" : "Upload profile photo"}
+          <UserRound size={18} /> {photoUploading ? "Uploading..." : profile.photoUrl ? "Change profile photo" : "Upload profile photo"}
           <input type="file" accept="image/jpeg,image/png,image/webp" hidden disabled={photoUploading} onChange={uploadPhoto} />
         </label>
         <button className="pp-btn pp-btn-amber">Save profile</button>
       </form>
 
       <h2 className="pp-h2" style={{ marginTop: 20 }}>Report history</h2>
-      {!data.reports.length && <p className="pp-sub">Your signed-in rescue reports will appear here.</p>}
-      {data.reports.map((report) => <div className="pp-listcard" style={{ marginTop: 8 }} key={report.id}><div style={{ flex: 1 }}><b>Report #{report.id}</b><div className="pp-sub">{report.tags.join(", ")}</div></div><span className="pp-pill" style={{ background: "var(--bg)" }}>{report.status}</span></div>)}
+      {!data?.reports?.length && <p className="pp-sub">Your signed-in rescue reports will appear here.</p>}
+      {data?.reports?.map((report) => (
+        <div className="pp-listcard" style={{ marginTop: 8 }} key={report.id}>
+          <div style={{ flex: 1 }}><b>Report #{report.id}</b><div className="pp-sub">{report.tags.join(", ")}</div></div>
+          <span className="pp-pill" style={{ background: "var(--bg)" }}>{report.status}</span>
+        </div>
+      ))}
 
-      {data.application
+      {data?.application
         ? <div className="pp-card" style={{ marginTop: 18 }}><b>{data.application.organizationName}</b><p className="pp-sub">Application status: {data.application.status}</p></div>
-        : profile.role === "user" && profile.emailVerified && ["shelter", "vet"].includes(profile.accountType) && <div style={{ marginTop: 18 }}><ApplicationForm refresh={refresh} toast={toast} defaultType={profile.accountType} /></div>}
+        : profile.role === "user" && ["shelter", "vet"].includes(profile.accountType) && <div style={{ marginTop: 18 }}><ApplicationForm refresh={refresh} toast={toast} defaultType={profile.accountType} /></div>}
       {profile.role === "admin" && <AdminPanel toast={toast} />}
     </div>
   );

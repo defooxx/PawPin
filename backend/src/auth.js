@@ -7,9 +7,10 @@ import { config } from "./config.js";
 const googleClient = config.googleClientId ? new OAuth2Client(config.googleClientId) : null;
 
 export function publicUser(user) {
+  const isSyntheticEmail = typeof user.email === "string" && user.email.endsWith("@pawpin.internal");
   return {
     id: user.id,
-    email: user.email,
+    email: isSyntheticEmail ? null : (user.email || null),
     name: user.name,
     photoUrl: user.photoUrl,
     location: user.location,
@@ -17,7 +18,9 @@ export function publicUser(user) {
     accountType: user.accountType || "user",
     pointsBalance: user.pointsBalance,
     status: user.status,
-    emailVerified: Boolean(user.emailVerified),
+    emailVerified: isSyntheticEmail ? false : Boolean(user.emailVerified),
+    phoneNumber: user.phoneNumber || null,
+    phoneVerified: Boolean(user.phoneVerified),
     locationConsent: user.locationConsent || "ask",
     createdAt: user.createdAt,
   };

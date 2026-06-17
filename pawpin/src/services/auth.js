@@ -40,6 +40,11 @@ export const googleLogin = (credential) => request("/auth/google", {
   body: JSON.stringify({ credential }),
 }).then(saveSession);
 
+export const firebasePhoneLogin = (idToken, profileData = {}) => request("/auth/firebase-phone", {
+  method: "POST",
+  body: JSON.stringify({ idToken, ...profileData }),
+}).then(saveSession);
+
 export const verifyEmail = (token) => request("/auth/verify-email", {
   method: "POST",
   body: JSON.stringify({ token }),

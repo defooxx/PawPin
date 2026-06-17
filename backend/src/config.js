@@ -106,4 +106,9 @@ export const config = Object.freeze({
     resendApiKey: optional("RESEND_API_KEY"),
     from: optional("EMAIL_FROM"),
   }),
+  firebase: Object.freeze({
+    projectId: optional("FIREBASE_PROJECT_ID"),
+    clientEmail: optional("FIREBASE_CLIENT_EMAIL"),
+    privateKey: optional("FIREBASE_PRIVATE_KEY")?.replace(/\\n/g, "\n"),
+  }),
 });
