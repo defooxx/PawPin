@@ -56,9 +56,10 @@ export default function App() {
       {tab === "health" && <HealthScreen />}
       {tab === "account" && <AccountScreen
         data={accountData}
-        onAuthenticated={async () => {
-          await refreshAccount();
+        onAuthenticated={(user) => {
+          setAccountData((current) => ({ ...(current ?? {}), user }));
           setTab("home");
+          refreshAccount();
         }}
         onBack={() => setTab("home")}
         onLogout={() => { logout(); setAccountData(null); setTab("home"); ping("Signed out"); }}
