@@ -71,9 +71,6 @@ function AuthForm({ onAuthenticated, onDone, toast }) {
   const finishAuth = (user) => {
     onAuthenticated(user);
     onDone();
-    setTimeout(() => {
-      window.location.assign("/");
-    }, 120);
   };
 
   const submit = async (event) => {
