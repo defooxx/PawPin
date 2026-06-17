@@ -80,6 +80,11 @@ async function createRegisteredUser({ email, password, name, location, accountTy
     name: stripHtml(name),
     location: stripHtml(location),
     role: "user",
+    pointsBalance: 0,
+    status: "active",
+    emailVerified: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
   try {
     const acceptedAt = new Date();
