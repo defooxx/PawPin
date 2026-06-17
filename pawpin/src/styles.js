@@ -1,5 +1,4 @@
 export const APP_STYLES = String.raw`
-@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700&display=swap");
 
 :root {
   --bg: #fff4ea;
@@ -18,6 +17,7 @@ export const APP_STYLES = String.raw`
   --sos: #e5462e;
   --sos-soft: #fbe0db;
   --line: #f0e1d2;
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -26,8 +26,8 @@ body { min-width: 320px; }
 button, input, textarea, select { font: inherit; }
 button:disabled { cursor: not-allowed; }
 
-.pp-root { color: var(--ink); font-family: "Nunito", system-ui, sans-serif; }
-.pp-fred { font-family: "Nunito", system-ui, sans-serif; }
+.pp-root { color: var(--ink); font-family: var(--font); }
+.pp-fred { font-family: var(--font); }
 .pp-stage {
   align-items: center;
   background:
@@ -105,7 +105,7 @@ button:disabled { cursor: not-allowed; }
   display: flex;
   flex: 1;
   flex-direction: column;
-  font-family: "Nunito";
+  font-family: var(--font);
   font-size: 10.5px;
   font-weight: 700;
   gap: 3px;
@@ -124,15 +124,15 @@ button:disabled { cursor: not-allowed; }
 .pp-tab.active { color: var(--amber-deep); }
 .pp-tab.active .pp-pawwrap { background: var(--amber-soft); transform: translateY(-1px); }
 .pp-card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
-.pp-h1 { font-family: "Nunito", system-ui, sans-serif; font-size: 20px; font-weight: 700; letter-spacing: -.12px; line-height: 1.2; }
-.pp-h2 { font-family: "Nunito", system-ui, sans-serif; font-size: 15.5px; font-weight: 700; }
+.pp-h1 { font-family: var(--font); font-size: 19.5px; font-weight: 700; letter-spacing: -.08px; line-height: 1.22; }
+.pp-h2 { font-family: var(--font); font-size: 15px; font-weight: 700; }
 .pp-sub { color: var(--ink-soft); font-size: 13px; line-height: 1.45; }
 .pp-link {
   background: none;
   border: none;
   color: var(--amber-deep);
   cursor: pointer;
-  font-family: "Nunito";
+  font-family: var(--font);
   font-size: 13px;
   font-weight: 700;
 }
@@ -157,7 +157,7 @@ button:disabled { cursor: not-allowed; }
   border-radius: 999px;
   color: var(--ink);
   cursor: pointer;
-  font-family: "Nunito";
+  font-family: var(--font);
   font-size: 13px;
   font-weight: 700;
   padding: 8px 14px;
@@ -218,7 +218,7 @@ button:disabled { cursor: not-allowed; }
   border-radius: 16px;
   cursor: pointer;
   display: flex;
-  font-family: "Nunito";
+  font-family: var(--font);
   font-size: 15px;
   font-weight: 700;
   gap: 8px;
@@ -231,7 +231,7 @@ button:disabled { cursor: not-allowed; }
 .pp-btn-ghost { background: var(--bg); color: var(--ink); }
 .pp-pill { align-items: center; border-radius: 999px; display: inline-flex; font-size: 11.5px; font-weight: 700; gap: 5px; padding: 4px 10px; }
 .pp-stat { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; flex: 1; padding: 13px; }
-.pp-statnum { font-family: "Nunito", system-ui, sans-serif; font-size: 21px; font-weight: 700; line-height: 1; }
+.pp-statnum { font-family: var(--font); font-size: 20px; font-weight: 700; line-height: 1; }
 .pp-listcard { align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; display: flex; gap: 12px; padding: 12px; }
 .pp-thumb { border-radius: 15px; display: grid; flex-shrink: 0; font-size: 30px; height: 60px; place-items: center; width: 60px; }
 .pp-adopt { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
@@ -276,7 +276,7 @@ button:disabled { cursor: not-allowed; }
   color: var(--ink-soft);
   cursor: pointer;
   flex: 1;
-  font-family: "Nunito";
+  font-family: var(--font);
   font-size: 13px;
   font-weight: 700;
   padding: 9px;
@@ -320,7 +320,7 @@ button:disabled { cursor: not-allowed; }
   width: 48px;
 }
 .pp-auth-icon.sage { background: var(--sage); box-shadow: 0 18px 30px -18px rgba(63, 155, 126, .8); }
-.pp-auth-title { font-family: "Nunito", system-ui, sans-serif; font-size: 19px; font-weight: 700; letter-spacing: -.05px; line-height: 1.18; margin: 8px 0 0; }
+.pp-auth-title { font-family: var(--font); font-size: 18px; font-weight: 700; letter-spacing: -.02px; line-height: 1.2; margin: 8px 0 0; }
 .pp-auth-sub { color: var(--ink-soft); font-size: 13px; font-weight: 500; line-height: 1.45; margin: 0; }
 .pp-auth-choice {
   align-items: center;
@@ -340,7 +340,7 @@ button:disabled { cursor: not-allowed; }
   width: 100%;
 }
 .pp-auth-choice:disabled { opacity: 1; }
-.pp-auth-choice b { display: block; font-family: "Nunito", system-ui, sans-serif; font-size: 13.5px; font-weight: 700; line-height: 1.22; }
+.pp-auth-choice b { display: block; font-family: var(--font); font-size: 13px; font-weight: 700; line-height: 1.24; }
 .pp-auth-choice span { color: var(--ink-soft); display: block; font-size: 11.5px; font-weight: 500; line-height: 1.35; margin-top: 3px; }
 .pp-auth-choice-icon { align-items: center; background: #fff0f1; border-radius: 12px; color: #4285f4; display: grid; font-size: 18px; font-weight: 700; height: 38px; place-items: center; width: 38px; }
 .pp-auth-choice-icon.phone { color: var(--ink); font-size: 18px; }
@@ -348,7 +348,7 @@ button:disabled { cursor: not-allowed; }
 .pp-google-hitarea > div { height: 100% !important; width: 100% !important; }
 .pp-auth-config-note { background: var(--amber-soft); border: 1px solid var(--line); border-radius: 14px; color: var(--ink-soft); display: grid; font-size: 11.5px; font-weight: 600; gap: 3px; padding: 10px 12px; text-align: center; }
 .pp-auth-foot { color: var(--ink-soft); font-size: 12.5px; font-weight: 600; margin: 58px 0 0; text-align: center; }
-.pp-phone-entry { color: var(--ink-soft); display: block; font-size: 11.5px; font-weight: 700; margin-bottom: 13px; }
+.pp-phone-entry { color: var(--ink-soft); display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 13px; }
 .pp-phone-input {
   align-items: center;
   background: var(--bg);
@@ -360,7 +360,7 @@ button:disabled { cursor: not-allowed; }
   margin-top: 9px;
   padding: 12px;
 }
-.pp-phone-input strong { background: #f4e7d8; border-radius: 9px; color: var(--ink); flex-shrink: 0; font-size: 13px; font-weight: 700; padding: 6px 9px; }
+.pp-phone-input strong { background: #f4e7d8; border-radius: 9px; color: var(--ink); flex-shrink: 0; font-size: 13px; font-weight: 600; padding: 6px 9px; }
 .pp-phone-input input { background: transparent; border: none; color: var(--ink); font-size: 13.5px; font-weight: 600; outline: none; width: 100%; }
 .pp-auth-note {
   background: var(--sage-soft);
@@ -383,7 +383,7 @@ button:disabled { cursor: not-allowed; }
   border-radius: 15px;
   color: #e8d7c6;
   display: flex;
-  font-family: "Nunito", system-ui, sans-serif;
+  font-family: var(--font);
   font-size: 18px;
   font-weight: 700;
   height: 44px;
