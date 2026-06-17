@@ -338,12 +338,16 @@ button:disabled { cursor: not-allowed; }
   padding: 17px;
   position: relative;
   text-align: left;
+  width: 100%;
 }
+.pp-auth-choice:disabled { opacity: 1; }
 .pp-auth-choice b { display: block; font-family: "Fredoka"; font-size: 21px; line-height: 1.05; }
 .pp-auth-choice span { color: var(--ink-soft); display: block; font-size: 15px; font-weight: 800; line-height: 1.35; margin-top: 5px; }
 .pp-auth-choice-icon { align-items: center; background: #fff0f1; border-radius: 16px; color: #4285f4; display: grid; font-size: 25px; font-weight: 900; height: 52px; place-items: center; width: 52px; }
+.pp-auth-choice-icon.phone { color: var(--ink); font-size: 24px; }
 .pp-google-hitarea { inset: 0; opacity: .001; position: absolute; }
 .pp-google-hitarea > div { height: 100% !important; width: 100% !important; }
+.pp-auth-config-note { background: var(--amber-soft); border: 1px solid var(--line); border-radius: 14px; color: var(--ink-soft); display: grid; font-size: 12px; font-weight: 800; gap: 3px; padding: 10px 12px; text-align: center; }
 .pp-auth-foot { color: var(--ink-soft); font-size: 15px; font-weight: 900; margin: 120px 0 0; text-align: center; }
 .pp-phone-entry { color: var(--ink-soft); display: block; font-size: 15px; font-weight: 900; margin-bottom: 15px; }
 .pp-phone-input {

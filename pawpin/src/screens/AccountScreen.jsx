@@ -225,6 +225,11 @@ function PhoneAuthFlow({ onAuthenticated, onBack, toast }) {
 function AuthLanding({ onAuthenticated, toast }) {
   const [mode, setMode] = useState("landing"); // landing | phone
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  const missingGoogle = () => toast("Google sign-in is not configured yet.");
+  const startPhone = () => {
+    if (!isFirebaseConfigured) return toast("Phone sign-in is not configured yet.");
+    setMode("phone");
+  };
 
   const finishGoogleLogin = async (credential) => {
     try {
@@ -253,34 +258,41 @@ function AuthLanding({ onAuthenticated, toast }) {
       </div>
 
       <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
-        {googleClientId
-          ? <div className="pp-auth-choice google">
-              <div className="pp-auth-choice-icon">G</div>
-              <div>
-                <b>Continue with Google</b>
-                <span>Quick sign in with your Google account</span>
-              </div>
-              <ChevronRight size={20} />
-              <div className="pp-google-hitarea">
-                <GoogleLogin
-                  onSuccess={(response) => finishGoogleLogin(response.credential)}
-                  onError={() => toast("Google sign-in failed")}
-                  width="320"
-                />
-              </div>
-            </div>
-          : <p className="pp-sub" style={{ fontSize: 12 }}>Google sign-in needs VITE_GOOGLE_CLIENT_ID in Vercel.</p>}
-
-        {googleClientId && isFirebaseConfigured && <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--muted)", fontSize: 13 }}>
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-          or
-          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        </div>}
-
-        <button className="pp-btn pp-btn-ghost" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => setMode("phone")} disabled={!isFirebaseConfigured}>
-          <span style={{ fontSize: 20 }}>📱</span>
-          <span>{isFirebaseConfigured ? "Use Nepal phone number" : "Phone sign-in needs Firebase env vars"}</span>
+        <button type="button" className="pp-auth-choice google" onClick={googleClientId ? undefined : missingGoogle}>
+          <div className="pp-auth-choice-icon">G</div>
+          <div>
+            <b>Continue with Google</b>
+            <span>Quick sign in with your Google account</span>
+          </div>
+          <ChevronRight size={20} />
+          {googleClientId && <div className="pp-google-hitarea">
+            <GoogleLogin
+              onSuccess={(response) => finishGoogleLogin(response.credential)}
+              onError={() => toast("Google sign-in failed")}
+              width="320"
+            />
+          </div>}
         </button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--muted)", fontSize: 13 }}>
+          <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+          or
+          <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+        </div>
+
+        <button type="button" className="pp-auth-choice" onClick={startPhone}>
+          <div className="pp-auth-choice-icon phone">📱</div>
+          <div>
+            <b>Use Nepal phone number</b>
+            <span>NTC · Ncell · OTP via SMS</span>
+          </div>
+          <ChevronRight size={20} />
+        </button>
+
+        {(!googleClientId || !isFirebaseConfigured) && <div className="pp-auth-config-note">
+          {!googleClientId && <span>Google needs its Vercel client ID.</span>}
+          {!isFirebaseConfigured && <span>Phone OTP needs Firebase env vars.</span>}
+        </div>}
       </div>
 
       <p className="pp-auth-foot">
