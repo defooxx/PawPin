@@ -11,12 +11,13 @@ const TABS = [
 ];
 
 export function AppShell({ activeTab, children, onAccount, onDonate, onTabChange, toast, user }) {
+  const authMode = activeTab === "account" && !user;
   return (
     <div className="pp-root">
       <style>{APP_STYLES}</style>
       <div className="pp-stage">
-        <div className="pp-phone">
-          <header className="pp-header">
+        <div className={`pp-phone${authMode ? " pp-phone-auth" : ""}`}>
+          {!authMode && <header className="pp-header">
             <div className="pp-brand">
               <div className="pp-logo"><PawPrint size={21} color="#fff" /></div>
               <div>
@@ -30,9 +31,9 @@ export function AppShell({ activeTab, children, onAccount, onDonate, onTabChange
                 {user?.photoUrl ? <img src={user.photoUrl} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} /> : <UserRound size={19} color="var(--sage)" />}
               </button>
             </div>
-          </header>
+          </header>}
 
-          <main className="pp-scroll">{children}</main>
+          <main className={`pp-scroll${authMode ? " pp-auth-scroll" : ""}`}>{children}</main>
 
           {toast && <div className="pp-toast" role="status"><Check size={17} color="var(--amber)" />{toast}</div>}
 

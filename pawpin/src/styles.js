@@ -87,6 +87,8 @@ button:disabled { cursor: not-allowed; }
 }
 .pp-scroll { flex: 1; overflow-x: hidden; overflow-y: auto; padding: 16px 16px 22px; }
 .pp-scroll::-webkit-scrollbar { width: 0; }
+.pp-phone-auth { background: linear-gradient(180deg, #fff 0%, #fffdfb 72%, #fff7ef 100%); }
+.pp-auth-scroll { padding: 0; }
 .pp-tabs {
   background: var(--surface);
   border-top: 1px solid var(--line);
@@ -303,6 +305,9 @@ button:disabled { cursor: not-allowed; }
 .pp-notice input { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; color: var(--ink); margin-top: 8px; outline: none; padding: 9px 10px; width: 100%; }
 .pp-upload { align-items: center; background: var(--sage-soft); border: 1px dashed var(--sage); border-radius: 14px; color: var(--sage); cursor: pointer; display: flex; font-size: 12.5px; font-weight: 800; gap: 8px; justify-content: center; margin: 12px 0; padding: 13px; }
 .pp-auth-flow { display: flex; flex-direction: column; justify-content: center; min-height: 610px; padding: 18px 8px 28px; }
+.pp-auth-screen { min-height: 100%; padding: 18px 24px 28px; position: relative; }
+.pp-auth-back { left: 16px; position: absolute; top: 16px; z-index: 2; }
+.pp-build-pill { background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 999px; color: var(--amber-deep); font-size: 10px; font-weight: 900; padding: 4px 8px; position: absolute; right: 16px; text-transform: uppercase; top: 18px; z-index: 2; }
 .pp-auth-head { align-items: center; display: flex; flex-direction: column; gap: 9px; margin-bottom: 22px; text-align: center; }
 .pp-auth-icon {
   align-items: center;

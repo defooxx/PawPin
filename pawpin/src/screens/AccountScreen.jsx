@@ -433,8 +433,9 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
 
   if (!profile) {
     return (
-      <div>
-        <button className="pp-icobtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
+      <div className="pp-auth-screen">
+        <button className="pp-icobtn pp-auth-back" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button>
+        <div className="pp-build-pill">auth redesign live</div>
         <AuthLanding onAuthenticated={handleAuthenticated} toast={toast} />
       </div>
     );
