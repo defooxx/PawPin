@@ -53,7 +53,7 @@ function PasswordField({ label, value, onChange, ...props }) {
   );
 }
 
-function AuthForm({ onAuthenticated, toast }) {
+function AuthForm({ onAuthenticated, onDone, toast }) {
   const [mode, setMode] = useState("login");
   const [form, setForm] = useState({
     name: "", email: "", password: "", confirmPassword: "", location: "", accountType: "user",
@@ -76,6 +76,7 @@ function AuthForm({ onAuthenticated, toast }) {
       if (mode === "verify") {
         const session = await verifyEmail(form.token);
         onAuthenticated(session.user);
+        onDone();
         toast("Email verified. Welcome to PawPin.");
       } else if (mode === "forgot") {
         const result = await requestPasswordReset(form.email);
@@ -89,6 +90,7 @@ function AuthForm({ onAuthenticated, toast }) {
       } else {
         const session = mode === "login" ? await login(form) : await register(form);
         onAuthenticated(session.user);
+        onDone();
         if (mode === "register" && session.verificationRequired) {
           setForm((current) => ({ ...current, token: session.developmentVerificationToken || "" }));
           toast(session.verificationEmailSent ? "Account created. Check your email to verify when you can." : "Account created. You can verify your email from your profile.");
@@ -107,6 +109,7 @@ function AuthForm({ onAuthenticated, toast }) {
     try {
       const session = await googleLogin(credential);
       onAuthenticated(session.user);
+      onDone();
       toast(`Welcome, ${session.user.name}`);
     } catch (error) {
       toast(error.message);
@@ -329,7 +332,7 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
   const [photoUploading, setPhotoUploading] = useState(false);
   useEffect(() => setProfile(data?.user || null), [data]);
 
-  if (!profile) return <div><button className="pp-icobtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button><AuthForm onAuthenticated={onAuthenticated} toast={toast} /></div>;
+  if (!profile) return <div><button className="pp-icobtn" onClick={onBack} aria-label="Back"><ArrowLeft size={18} /></button><AuthForm onAuthenticated={onAuthenticated} onDone={onBack} toast={toast} /></div>;
 
   const save = async (event) => {
     event.preventDefault();
