@@ -68,6 +68,13 @@ function AuthForm({ onAuthenticated, onDone, toast }) {
     ["A number", /\d/.test(form.password)],
     ["Passwords match", Boolean(form.password) && form.password === form.confirmPassword],
   ];
+  const finishAuth = (user) => {
+    onAuthenticated(user);
+    onDone();
+    setTimeout(() => {
+      window.location.assign("/");
+    }, 120);
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -75,8 +82,7 @@ function AuthForm({ onAuthenticated, onDone, toast }) {
     try {
       if (mode === "verify") {
         const session = await verifyEmail(form.token);
-        onAuthenticated(session.user);
-        onDone();
+        finishAuth(session.user);
         toast("Email verified. Welcome to PawPin.");
       } else if (mode === "forgot") {
         const result = await requestPasswordReset(form.email);
@@ -89,8 +95,7 @@ function AuthForm({ onAuthenticated, onDone, toast }) {
         toast("Password updated. Sign in with your new password.");
       } else {
         const session = mode === "login" ? await login(form) : await register(form);
-        onAuthenticated(session.user);
-        onDone();
+        finishAuth(session.user);
         if (mode === "register" && session.verificationRequired) {
           setForm((current) => ({ ...current, token: session.developmentVerificationToken || "" }));
           toast(session.verificationEmailSent ? "Account created. Check your email to verify when you can." : "Account created. You can verify your email from your profile.");
@@ -108,8 +113,7 @@ function AuthForm({ onAuthenticated, onDone, toast }) {
   const finishGoogleLogin = async (credential) => {
     try {
       const session = await googleLogin(credential);
-      onAuthenticated(session.user);
-      onDone();
+      finishAuth(session.user);
       toast(`Welcome, ${session.user.name}`);
     } catch (error) {
       toast(error.message);
