@@ -14,7 +14,7 @@ import {
   uploadApplicationDocument,
   uploadProfilePhoto,
 } from "../services/auth.js";
-import { auth, RecaptchaVerifier, signInWithPhoneNumber } from "../services/firebase.js";
+import { auth, isFirebaseConfigured, RecaptchaVerifier, signInWithPhoneNumber } from "../services/firebase.js";
 import { fade } from "../data.js";
 
 function Field({ label, ...props }) {
@@ -87,6 +87,7 @@ function PhoneAuthFlow({ onAuthenticated, toast }) {
 
   // Render invisible reCAPTCHA
   useEffect(() => {
+    if (!auth) return undefined;
     if (!recaptchaRef.current) {
       recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", { size: "invisible" });
     }
@@ -98,6 +99,7 @@ function PhoneAuthFlow({ onAuthenticated, toast }) {
 
   const sendOtp = async (event) => {
     event.preventDefault();
+    if (!auth || !recaptchaRef.current) return toast("Phone sign-in is not configured yet.");
     const digits = phoneLocal.replace(/\D/g, "");
     if (digits.length < 9 || digits.length > 10) return toast("Enter a valid Nepal phone number (9 or 10 digits).");
     const fullNumber = `+977${digits.replace(/^977/, "")}`;
@@ -195,6 +197,7 @@ function PhoneAuthFlow({ onAuthenticated, toast }) {
 // onAuthenticated(user, isNewUser) — caller decides whether to navigate or show profile setup
 function AuthLanding({ onAuthenticated, toast }) {
   const [mode, setMode] = useState("landing"); // landing | phone
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   const finishGoogleLogin = async (credential) => {
     try {
@@ -223,23 +226,25 @@ function AuthLanding({ onAuthenticated, toast }) {
       </div>
 
       <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
-        <div style={{ display: "grid", placeItems: "center" }}>
-          <GoogleLogin
-            onSuccess={(response) => finishGoogleLogin(response.credential)}
-            onError={() => toast("Google sign-in failed")}
-            width="280"
-          />
-        </div>
+        {googleClientId
+          ? <div style={{ display: "grid", placeItems: "center" }}>
+              <GoogleLogin
+                onSuccess={(response) => finishGoogleLogin(response.credential)}
+                onError={() => toast("Google sign-in failed")}
+                width="280"
+              />
+            </div>
+          : <p className="pp-sub" style={{ fontSize: 12 }}>Google sign-in needs VITE_GOOGLE_CLIENT_ID in Vercel.</p>}
 
-        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--muted)", fontSize: 13 }}>
+        {googleClientId && isFirebaseConfigured && <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--muted)", fontSize: 13 }}>
           <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
           or
           <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-        </div>
+        </div>}
 
-        <button className="pp-btn pp-btn-ghost" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => setMode("phone")}>
+        <button className="pp-btn pp-btn-ghost" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }} onClick={() => setMode("phone")} disabled={!isFirebaseConfigured}>
           <Phone size={17} />
-          Sign in with phone number
+          {isFirebaseConfigured ? "Sign in with phone number" : "Phone sign-in needs Firebase env vars"}
         </button>
       </div>
 
