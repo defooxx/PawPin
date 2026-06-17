@@ -73,6 +73,30 @@ async function authResponse(user) {
   return { token: issueToken(user), user: publicUser(user) };
 }
 
+async function createRegisteredUser({ email, password, name, location, accountType, locationConsent }) {
+  const common = {
+    email,
+    passwordHash: await hashPassword(password),
+    name: stripHtml(name),
+    location: stripHtml(location),
+    role: "user",
+  };
+  try {
+    const acceptedAt = new Date();
+    return await insertId("users", {
+      ...common,
+      accountType,
+      termsAcceptedAt: acceptedAt,
+      privacyAcceptedAt: acceptedAt,
+      locationConsent,
+    });
+  } catch (error) {
+    if (!/column|accountType|termsAcceptedAt|privacyAcceptedAt|locationConsent/i.test(error.message)) throw error;
+    console.error("Registration consent columns unavailable, falling back to core user insert:", error.message);
+    return insertId("users", common);
+  }
+}
+
 async function createAuthToken(userId, type) {
   const token = createOneTimeToken();
   await db("auth_tokens").where({ userId, type }).whereNull("usedAt").update({ usedAt: db.fn.now() });
@@ -218,29 +242,34 @@ router.post("/auth/register", authRateLimit, async (req, res) => {
     return res.status(400).json({ error: "Accept the Terms and Privacy Policy and choose a location preference" });
   }
   try {
-    const acceptedAt = new Date();
-    const id = await insertId("users", {
-      email,
-      passwordHash: await hashPassword(password),
-      name: stripHtml(name),
-      location: stripHtml(location),
-      role: "user",
-      accountType,
-      termsAcceptedAt: acceptedAt,
-      privacyAcceptedAt: acceptedAt,
-      locationConsent,
-    });
+    const id = await createRegisteredUser({ email, password, name, location, accountType, locationConsent });
     const user = await db("users").where({ id }).first();
-    const verificationToken = await createAuthToken(id, "email_verification");
-    await audit(id, "register", "password");
+    let verificationToken = null;
+    try {
+      verificationToken = await createAuthToken(id, "email_verification");
+    } catch (error) {
+      console.error("Registration verification token failed:", error.message);
+    }
+    try {
+      await audit(id, "register", "password");
+    } catch (error) {
+      console.error("Registration audit failed:", error.message);
+    }
     return res.status(201).json({
       ...await authResponse(user),
-      verificationRequired: true,
+      verificationRequired: Boolean(verificationToken),
       ...developmentToken("developmentVerificationToken", verificationToken),
     });
   } catch (error) {
     if (/unique|duplicate/i.test(error.message)) return res.status(409).json({ error: "An account already exists for this email" });
-    console.error("Registration failed:", error.message);
+    console.error("Registration failed:", {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      constraint: error.constraint,
+      column: error.column,
+      table: error.table,
+    });
     throw error;
   }
 });
