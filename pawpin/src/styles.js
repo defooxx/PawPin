@@ -348,48 +348,48 @@ button:disabled { cursor: not-allowed; }
 .pp-google-hitarea > div { height: 100% !important; width: 100% !important; }
 .pp-auth-config-note { background: var(--amber-soft); border: 1px solid var(--line); border-radius: 14px; color: var(--ink-soft); display: grid; font-size: 11.5px; font-weight: 600; gap: 3px; padding: 10px 12px; text-align: center; }
 .pp-auth-foot { color: var(--ink-soft); font-size: 13px; font-weight: 700; margin: 58px 0 0; text-align: center; }
-.pp-phone-entry { color: var(--ink-soft); display: block; font-size: 15px; font-weight: 900; margin-bottom: 15px; }
+.pp-phone-entry { color: var(--ink-soft); display: block; font-size: 13px; font-weight: 700; margin-bottom: 15px; }
 .pp-phone-input {
   align-items: center;
   background: var(--bg);
   border: 2px solid var(--amber);
-  border-radius: 22px;
+  border-radius: 18px;
   box-shadow: 0 0 0 5px var(--amber-soft);
   display: flex;
   gap: 12px;
   margin-top: 9px;
-  padding: 18px;
+  padding: 15px;
 }
-.pp-phone-input strong { background: #f4e7d8; border-radius: 11px; color: var(--ink); flex-shrink: 0; font-size: 18px; padding: 8px 11px; }
-.pp-phone-input input { background: transparent; border: none; color: var(--ink); font-size: 19px; font-weight: 900; outline: none; width: 100%; }
+.pp-phone-input strong { background: #f4e7d8; border-radius: 10px; color: var(--ink); flex-shrink: 0; font-size: 15px; font-weight: 700; padding: 7px 10px; }
+.pp-phone-input input { background: transparent; border: none; color: var(--ink); font-size: 16px; font-weight: 700; outline: none; width: 100%; }
 .pp-auth-note {
   background: var(--sage-soft);
   border: 1.5px solid var(--sage);
-  border-radius: 18px;
+  border-radius: 16px;
   color: var(--sage);
-  font-size: 16px;
-  font-weight: 900;
+  font-size: 13.5px;
+  font-weight: 700;
   line-height: 1.45;
-  margin: 14px 0 26px;
-  padding: 18px;
+  margin: 14px 0 24px;
+  padding: 14px;
 }
-.pp-otp-wrap { display: block; margin: 14px 0 24px; position: relative; }
+.pp-otp-wrap { display: block; margin: 12px 0 22px; position: relative; }
 .pp-otp-wrap input { height: 1px; left: 50%; opacity: 0; position: absolute; top: 50%; width: 1px; }
-.pp-otp-boxes { display: grid; gap: 11px; grid-template-columns: repeat(6, 1fr); }
+.pp-otp-boxes { display: grid; gap: 8px; grid-template-columns: repeat(6, 1fr); }
 .pp-otp-boxes span {
   align-items: center;
   background: var(--bg);
   border: 2px solid var(--line);
-  border-radius: 18px;
+  border-radius: 15px;
   color: #e8d7c6;
   display: flex;
-  font-family: "Fredoka";
-  font-size: 30px;
+  font-family: "Nunito", system-ui, sans-serif;
+  font-size: 22px;
   font-weight: 700;
-  height: 58px;
+  height: 50px;
   justify-content: center;
 }
-.pp-otp-boxes span.filled { border-color: var(--amber); box-shadow: 0 0 0 5px var(--amber-soft); color: var(--ink); }
+.pp-otp-boxes span.filled { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); color: var(--ink); }
 .pp-sr-only { height: 1px; margin: -1px; overflow: hidden; position: absolute; width: 1px; }
 .pp-auth-roles { margin: 0 0 22px; }
 .pp-auth-roles .pp-role-choice { border-radius: 18px; font-size: 13px; gap: 8px; min-height: 82px; }
