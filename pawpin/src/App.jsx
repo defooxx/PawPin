@@ -72,12 +72,12 @@ export default function App() {
       toast={toast}
       user={accountData?.user}
     >
-      {tab === "home" && <HomeScreen go={navigate} donate={() => ping("Donation sent — thank you! 💛")} />}
-      {tab === "rescue" && <RescueScreen toast={ping} />}
+      {tab === "home" && <HomeScreen go={navigate} donate={() => ping("Donation sent — thank you! 💛")} user={accountData?.user} />}
+      {tab === "rescue" && <RescueScreen toast={ping} user={accountData?.user} />}
       {tab === "lost" && <LostScreen toast={ping} />}
       {tab === "map" && <MapScreen user={accountData?.user} toast={ping} />}
-      {tab === "adopt" && <AdoptScreen />}
-      {tab === "health" && <HealthScreen />}
+      {tab === "adopt" && <AdoptScreen user={accountData?.user} toast={ping} />}
+      {tab === "health" && <HealthScreen user={accountData?.user} toast={ping} />}
       {tab === "account" && <AccountScreen
         data={accountData}
         onAuthenticated={(user) => {

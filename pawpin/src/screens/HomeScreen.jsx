@@ -3,7 +3,78 @@ import {
 } from "lucide-react";
 import { fade, LOST_PETS } from "../data.js";
 
-export function HomeScreen({ go, donate }) {
+
+
+export function HomeScreen({ go, donate, user }) {
+  if (user?.role === "shelter") {
+    return (
+      <div style={fade}>
+        <p className="pp-sub" style={{ marginTop: 2 }}>Welcome back, shelter coordinator 🐾</p>
+        <h1 className="pp-h1" style={{ marginTop: 2 }}>{user.name}</h1>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 16 }}>
+          <button className="pp-stat" onClick={() => go("rescue")} style={{ cursor: "pointer", border: "1px solid var(--line)", textAlign: "left", width: "100%", background: "none" }}>
+            <div className="pp-statnum" style={{ color: "var(--sos)" }}>Active</div>
+            <div className="pp-sub" style={{ fontSize: 12 }}>Rescue requests waiting</div>
+          </button>
+          <button className="pp-stat" onClick={() => go("adopt")} style={{ cursor: "pointer", border: "1px solid var(--line)", textAlign: "left", width: "100%", background: "none" }}>
+            <div className="pp-statnum" style={{ color: "var(--sage)" }}>Adoptions</div>
+            <div className="pp-sub" style={{ fontSize: 12 }}>Manage adoptable pets</div>
+          </button>
+        </div>
+
+        <h2 className="pp-h2" style={{ marginTop: 24, marginBottom: 10 }}>Shelter Operations</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button className="pp-card" onClick={() => go("rescue")} style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+            <PawPrint size={24} color="var(--amber)" />
+            <div style={{ flex: 1 }}>
+              <div className="pp-fred" style={{ fontSize: 15, fontWeight: 600 }}>Rescue Dispatch Board</div>
+              <div className="pp-sub" style={{ fontSize: 12.5 }}>Accept and respond to local rescue calls</div>
+            </div>
+            <ChevronRight size={18} color="var(--ink-soft)" />
+          </button>
+
+          <button className="pp-card" onClick={() => go("adopt")} style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+            <HeartHandshake size={24} color="var(--coral)" />
+            <div style={{ flex: 1 }}>
+              <div className="pp-fred" style={{ fontSize: 15, fontWeight: 600 }}>Adoption Visit Scheduler</div>
+              <div className="pp-sub" style={{ fontSize: 12.5 }}>Confirm adoption visits and manage animals</div>
+            </div>
+            <ChevronRight size={18} color="var(--ink-soft)" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (user?.role === "vet") {
+    return (
+      <div style={fade}>
+        <p className="pp-sub" style={{ marginTop: 2 }}>Welcome back, doctor 🩺</p>
+        <h1 className="pp-h1" style={{ marginTop: 2 }}>{user.name}</h1>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10, marginTop: 16 }}>
+          <button className="pp-stat" onClick={() => go("health")} style={{ cursor: "pointer", border: "1px solid var(--line)", textAlign: "left", width: "100%", background: "none" }}>
+            <div className="pp-statnum" style={{ color: "var(--sage)" }}>Queue</div>
+            <div className="pp-sub" style={{ fontSize: 12 }}>Open veterinary symptom consultations</div>
+          </button>
+        </div>
+
+        <h2 className="pp-h2" style={{ marginTop: 24, marginBottom: 10 }}>Medical Operations</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button className="pp-card" onClick={() => go("health")} style={{ width: "100%", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}>
+            <Stethoscope size={24} color="var(--sage)" />
+            <div style={{ flex: 1 }}>
+              <div className="pp-fred" style={{ fontSize: 15, fontWeight: 600 }}>Consultation Queue</div>
+              <div className="pp-sub" style={{ fontSize: 12.5 }}>View patient symptom checker submissions</div>
+            </div>
+            <ChevronRight size={18} color="var(--ink-soft)" />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={fade}>
       <p className="pp-sub" style={{ marginTop: 2 }}>Good afternoon 🐾</p>

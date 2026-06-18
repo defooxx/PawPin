@@ -66,3 +66,89 @@ export async function unassignPin(kind, id) {
   });
   return readResponse(response);
 }
+
+export async function getAdoptionMeetings() {
+  const response = await fetch(`${API_BASE}/adopt/meetings`, {
+    headers: requestHeaders(),
+  });
+  return readResponse(response);
+}
+
+export async function createAdoptionMeeting(details) {
+  const response = await fetch(`${API_BASE}/adopt/meetings`, {
+    method: "POST",
+    headers: requestHeaders(),
+    body: JSON.stringify(details),
+  });
+  return readResponse(response);
+}
+
+export async function updateAdoptionMeeting(id, status) {
+  const response = await fetch(`${API_BASE}/adopt/meetings/${id}`, {
+    method: "PATCH",
+    headers: requestHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  return readResponse(response);
+}
+
+export async function getConsultations() {
+  const response = await fetch(`${API_BASE}/consultations`, {
+    headers: requestHeaders(),
+  });
+  return readResponse(response);
+}
+
+export async function createConsultation(details) {
+  const response = await fetch(`${API_BASE}/consultations`, {
+    method: "POST",
+    headers: requestHeaders(),
+    body: JSON.stringify(details),
+  });
+  return readResponse(response);
+}
+
+export async function updateConsultation(id, status) {
+  const response = await fetch(`${API_BASE}/consultations/${id}`, {
+    method: "PATCH",
+    headers: requestHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  return readResponse(response);
+}
+
+export async function getAdoptableAnimals(species, status = "available") {
+  let url = `${API_BASE}/adopt?status=${status}`;
+  if (species) url += `&species=${species}`;
+  const response = await fetch(url);
+  return readResponse(response);
+}
+
+export async function createAdoptableAnimal(details) {
+  let photoUrl = details.photoUrl;
+  if (photoUrl?.startsWith("data:")) {
+    photoUrl = await uploadReportPhoto(photoUrl);
+  }
+  const response = await fetch(`${API_BASE}/adopt`, {
+    method: "POST",
+    headers: requestHeaders(),
+    body: JSON.stringify({ ...details, photoUrl }),
+  });
+  return readResponse(response);
+}
+
+export async function getMapPins() {
+  const response = await fetch(`${API_BASE}/map/pins`, {
+    headers: requestHeaders(),
+  });
+  return readResponse(response);
+}
+
+export async function resolvePin(kind, id) {
+  const response = await fetch(`${API_BASE}/map/pins/${kind}/${id}/resolve`, {
+    method: "POST",
+    headers: requestHeaders(),
+  });
+  return readResponse(response);
+}
+

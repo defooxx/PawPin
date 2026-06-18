@@ -130,6 +130,38 @@ export async function ensureFeaturesSchema() {
       table.timestamp("createdAt").defaultTo(db.fn.now());
     });
   }
+
+  // Adoption meetings table
+  if (!await db.schema.hasTable("adoption_meetings")) {
+    await db.schema.createTable("adoption_meetings", (table) => {
+      table.increments("id").primary();
+      table.integer("userId").notNullable();
+      table.string("userName", 100).notNullable();
+      table.string("userContact", 100).defaultTo("");
+      table.integer("petId").notNullable();
+      table.string("petName", 100).notNullable();
+      table.integer("shelterId").notNullable();
+      table.string("slot", 100).notNullable();
+      table.string("status", 20).notNullable().defaultTo("pending"); // pending | confirmed | completed
+      table.timestamp("createdAt").defaultTo(db.fn.now());
+      table.timestamp("updatedAt").defaultTo(db.fn.now());
+    });
+  }
+
+  // Consultation requests table
+  if (!await db.schema.hasTable("consultation_requests")) {
+    await db.schema.createTable("consultation_requests", (table) => {
+      table.increments("id").primary();
+      table.integer("userId").notNullable();
+      table.string("userName", 100).notNullable();
+      table.string("userContact", 100).defaultTo("");
+      table.string("petSpecies", 50).notNullable();
+      table.text("symptoms").notNullable().defaultTo("[]"); // JSON array of symptoms
+      table.string("status", 20).notNullable().defaultTo("pending"); // pending | contacted | resolved
+      table.timestamp("createdAt").defaultTo(db.fn.now());
+      table.timestamp("updatedAt").defaultTo(db.fn.now());
+    });
+  }
 }
 
 // ─── shelters ─────────────────────────────────────────────────────────────────
@@ -230,7 +262,7 @@ router.get("/map/pins", optionalAuth, async (req, res) => {
       .whereIn("r.status", ["pending", "review", "assigned"])
       .select(
         "r.id", "r.latitude", "r.longitude", "r.tags", "r.status", "r.createdAt",
-        "r.userId", "r.assignedUserId", "u.name as assignedUserName"
+        "r.userId", "r.assignedUserId", "u.name as assignedUserName", "r.photoUrl", "r.notes"
       )
       .orderBy("r.createdAt", "desc")
       .limit(100),
@@ -393,6 +425,61 @@ router.post("/map/pins/:kind/:id/unassign", requireAuth, async (req, res) => {
   } catch (error) {
     console.error("Unassignment failed:", error.message);
     res.status(500).json({ error: "Unable to unassign rescuer" });
+  }
+});
+
+/**
+ * POST /map/pins/:kind/:id/resolve
+ * Mark a rescue report as resolved, or a lost post as reunited.
+ */
+router.post("/map/pins/:kind/:id/resolve", requireAuth, async (req, res) => {
+  const { kind, id } = req.params;
+  const pinId = Number.parseInt(id, 10);
+  if (!Number.isSafeInteger(pinId) || !["rescue", "lost"].includes(kind)) {
+    return res.status(400).json({ error: "Invalid request parameters" });
+  }
+
+  try {
+    if (kind === "rescue") {
+      const report = await db("reports").where({ id: pinId }).first();
+      if (!report) return res.status(404).json({ error: "Rescue report not found" });
+      if (report.assignedUserId !== req.user.id && req.user.role !== "admin") {
+        return res.status(403).json({ error: "Only the assigned responder or an admin can resolve the case" });
+      }
+
+      await db("reports").where({ id: pinId }).update({
+        status: "resolved",
+        updatedAt: db.fn.now(),
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("pin-resolved", { id: pinId, kind: "rescue", status: "resolved" });
+      }
+
+      return res.json({ success: true, status: "resolved" });
+    } else {
+      const post = await db("lost_posts").where({ id: pinId }).first();
+      if (!post) return res.status(404).json({ error: "Lost animal post not found" });
+      if (post.userId !== req.user.id && post.assignedUserId !== req.user.id && req.user.role !== "admin") {
+        return res.status(403).json({ error: "Only the creator, helper, or an admin can resolve this post" });
+      }
+
+      await db("lost_posts").where({ id: pinId }).update({
+        status: "reunited",
+        updatedAt: db.fn.now(),
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("pin-resolved", { id: pinId, kind: "lost", status: "reunited" });
+      }
+
+      return res.json({ success: true, status: "reunited" });
+    }
+  } catch (error) {
+    console.error("Resolve failed:", error.message);
+    res.status(500).json({ error: "Unable to resolve case" });
   }
 });
 
@@ -850,6 +937,188 @@ router.post("/admin/points/award", requireAuth, requireRole("admin"), async (req
   await awardPoints(userId, amount, "manual", stripHtml(description));
   const updated = await db("users").where({ id: userId }).select("pointsBalance").first();
   res.json({ userId, newBalance: updated.pointsBalance });
+});
+
+/**
+ * POST /adopt/meetings
+ * Request a slot for a pet adoption meeting.
+ */
+router.post("/adopt/meetings", requireAuth, async (req, res) => {
+  const { petId, petName, shelterId, slot } = req.body || {};
+
+  if (!Number.isSafeInteger(petId) || !Number.isSafeInteger(shelterId) || typeof petName !== "string" || !petName.trim() || typeof slot !== "string" || !slot.trim()) {
+    return res.status(400).json({ error: "Missing or invalid meeting details" });
+  }
+
+  try {
+    const [inserted] = await db("adoption_meetings").insert({
+      userId: req.user.id,
+      userName: req.user.name,
+      userContact: req.user.email || req.user.phoneNumber || "No contact info",
+      petId,
+      petName: stripHtml(petName),
+      shelterId,
+      slot: stripHtml(slot),
+      status: "pending",
+    }).returning("id");
+
+    const id = typeof inserted === "object" ? inserted.id : inserted;
+    const meeting = await db("adoption_meetings").where({ id }).first();
+    res.status(201).json(meeting);
+  } catch (error) {
+    console.error("Failed to create adoption meeting:", error.message);
+    res.status(500).json({ error: "Failed to request meeting" });
+  }
+});
+
+/**
+ * GET /adopt/meetings
+ * List meetings. Shelters see requests sent to them. Users see requests they sent.
+ */
+router.get("/adopt/meetings", requireAuth, async (req, res) => {
+  try {
+    let query = db("adoption_meetings");
+    if (req.user.role === "shelter") {
+      query = query.where({ shelterId: req.user.id });
+    } else if (req.user.role === "user") {
+      query = query.where({ userId: req.user.id });
+    } else if (req.user.role === "admin") {
+      // Admins see all
+    } else {
+      return res.json([]);
+    }
+    const meetings = await query.orderBy("createdAt", "desc");
+    res.json(meetings);
+  } catch (error) {
+    console.error("Failed to fetch meetings:", error.message);
+    res.status(500).json({ error: "Failed to retrieve meetings" });
+  }
+});
+
+/**
+ * PATCH /adopt/meetings/:id
+ * Update meeting status (confirm, complete, or cancel).
+ */
+router.patch("/adopt/meetings/:id", requireAuth, async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const { status } = req.body || {};
+
+  if (!Number.isSafeInteger(id) || !["confirmed", "completed", "cancelled"].includes(status)) {
+    return res.status(400).json({ error: "Invalid status value" });
+  }
+
+  try {
+    const meeting = await db("adoption_meetings").where({ id }).first();
+    if (!meeting) return res.status(404).json({ error: "Meeting not found" });
+
+    if (req.user.role === "admin") {
+      // allow
+    } else if (status === "cancelled") {
+      if (meeting.userId !== req.user.id) {
+        return res.status(403).json({ error: "You can only cancel your own meetings" });
+      }
+    } else {
+      if (meeting.shelterId !== req.user.id) {
+        return res.status(403).json({ error: "Only the shelter can update this meeting status" });
+      }
+    }
+
+    await db("adoption_meetings").where({ id }).update({
+      status,
+      updatedAt: db.fn.now(),
+    });
+
+    res.json({ id, status });
+  } catch (error) {
+    console.error("Failed to update meeting:", error.message);
+    res.status(500).json({ error: "Failed to update meeting status" });
+  }
+});
+
+/**
+ * POST /consultations
+ * Create a vet consultation request.
+ */
+router.post("/consultations", requireAuth, async (req, res) => {
+  const { petSpecies, symptoms } = req.body || {};
+
+  if (!["dog", "cat"].includes(petSpecies) || !Array.isArray(symptoms)) {
+    return res.status(400).json({ error: "Invalid consultation details" });
+  }
+
+  try {
+    const [inserted] = await db("consultation_requests").insert({
+      userId: req.user.id,
+      userName: req.user.name,
+      userContact: req.user.email || req.user.phoneNumber || "No contact info",
+      petSpecies,
+      symptoms: JSON.stringify(symptoms.map(s => stripHtml(String(s)))),
+      status: "pending",
+    }).returning("id");
+
+    const id = typeof inserted === "object" ? inserted.id : inserted;
+    const request = await db("consultation_requests").where({ id }).first();
+    res.status(201).json({ ...request, symptoms: JSON.parse(request.symptoms) });
+  } catch (error) {
+    console.error("Failed to create consultation request:", error.message);
+    res.status(500).json({ error: "Failed to submit consultation request" });
+  }
+});
+
+/**
+ * GET /consultations
+ * List consultation requests. Vets see all open ones, users see their own.
+ */
+router.get("/consultations", requireAuth, async (req, res) => {
+  try {
+    let query = db("consultation_requests");
+    if (req.user.role === "vet") {
+      query = query.whereIn("status", ["pending", "contacted"]);
+    } else if (req.user.role === "user") {
+      query = query.where({ userId: req.user.id });
+    } else if (req.user.role === "admin") {
+      // Admins see all
+    } else {
+      return res.json([]);
+    }
+    const list = await query.orderBy("createdAt", "desc");
+    res.json(list.map(r => ({ ...r, symptoms: JSON.parse(r.symptoms) })));
+  } catch (error) {
+    console.error("Failed to fetch consultations:", error.message);
+    res.status(500).json({ error: "Failed to retrieve consultations" });
+  }
+});
+
+/**
+ * PATCH /consultations/:id
+ * Let Vets update status to contacted or resolved.
+ */
+router.patch("/consultations/:id", requireAuth, async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const { status } = req.body || {};
+
+  if (!Number.isSafeInteger(id) || !["contacted", "resolved"].includes(status)) {
+    return res.status(400).json({ error: "Invalid status value" });
+  }
+
+  try {
+    const request = await db("consultation_requests").where({ id }).first();
+    if (!request) return res.status(404).json({ error: "Consultation not found" });
+
+    if (req.user.role !== "vet" && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Only vets or admins can respond to consultations" });
+    }
+
+    await db("consultation_requests").where({ id }).update({
+      status,
+      updatedAt: db.fn.now(),
+    });
+
+    res.json({ id, status });
+  } catch (error) {
+    console.error("Failed to update consultation:", error.message);
+    res.status(500).json({ error: "Failed to update consultation status" });
+  }
 });
 
 export default router;

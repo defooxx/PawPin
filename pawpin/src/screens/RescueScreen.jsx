@@ -3,7 +3,7 @@ import { Bell, Building2, Camera, Check, Navigation, PawPrint, Phone, Plus } fro
 import L from "leaflet";
 import { fade, RESCUE_ISSUES, SHELTERS } from "../data.js";
 import { LocationChoiceDialog } from "../components/LocationChoiceDialog.jsx";
-import { createReport, uploadReportPhoto } from "../services/api.js";
+import { createReport, uploadReportPhoto, getMapPins, assignPin, unassignPin, resolvePin } from "../services/api.js";
 import { getCurrentLocation, stopWatchingLocation, watchCurrentLocation } from "../services/location.js";
 
 const KATHMANDU = [27.7172, 85.324];
@@ -68,7 +68,7 @@ function RescueMiniMap({ pin, onPin }) {
   );
 }
 
-export function RescueScreen({ toast }) {
+export function RescueScreen({ toast, user }) {
   const [photo, setPhoto]   = useState(null);
   const [issues, setIssues] = useState([]);
   const [sent, setSent]     = useState(false);
@@ -79,6 +79,59 @@ export function RescueScreen({ toast }) {
   const [locating, setLocating] = useState(false);
   const fileRef = useRef(null);
   const watchRef = useRef(null);
+
+  // Shelter state
+  const [reports, setReports] = useState([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+
+  const fetchReports = async () => {
+    setLoadingReports(true);
+    try {
+      const pins = await getMapPins();
+      const rescueReports = pins.filter(p => p.kind === "rescue");
+      setReports(rescueReports);
+    } catch (err) {
+      toast(err.message || "Failed to load rescue reports");
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user?.role === "shelter") {
+      fetchReports();
+    }
+  }, [user]);
+
+  const handleAssignReport = async (reportId) => {
+    try {
+      await assignPin("rescue", reportId);
+      toast("Rescue request accepted! Drive safely. 🐾");
+      fetchReports();
+    } catch (err) {
+      toast(err.message || "Failed to accept rescue request");
+    }
+  };
+
+  const handleUnassignReport = async (reportId) => {
+    try {
+      await unassignPin("rescue", reportId);
+      toast("Cancelled assignment.");
+      fetchReports();
+    } catch (err) {
+      toast(err.message || "Failed to cancel assignment");
+    }
+  };
+
+  const handleResolveReport = async (reportId) => {
+    try {
+      await resolvePin("rescue", reportId);
+      toast("Rescue case marked as resolved! Great job! 🎉");
+      fetchReports();
+    } catch (err) {
+      toast(err.message || "Failed to resolve rescue request");
+    }
+  };
 
   const stopSharing = () => {
     stopWatchingLocation(watchRef.current);
@@ -153,6 +206,97 @@ export function RescueScreen({ toast }) {
   };
 
   const reset = () => { stopSharing(); setSent(false); setPhoto(null); setIssues([]); setPin(null); };
+
+  if (user?.role === "shelter") {
+    return (
+      <div style={fade}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <h1 className="pp-h1" style={{ margin: 0 }}>Rescue Dispatch</h1>
+          <button className="pp-btn pp-btn-ghost" style={{ width: "auto", padding: "8px 12px", borderRadius: 12, fontSize: 13, border: "1px solid var(--line)" }} onClick={fetchReports} disabled={loadingReports}>
+            {loadingReports ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+        <p className="pp-sub" style={{ marginTop: 2, marginBottom: 16 }}>Manage active rescue requests in Kathmandu.</p>
+
+        {loadingReports && reports.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 30, color: "var(--ink-soft)" }}>Loading active requests...</div>
+        ) : reports.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, border: "1.5px dashed var(--line)", borderRadius: 18, color: "var(--ink-soft)", background: "var(--surface)" }}>
+            <span style={{ fontSize: 32, display: "block", marginBottom: 8 }}>🎉</span>
+            All clear! No pending rescues at the moment.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {reports.map((report) => {
+              const isAssignedToMe = report.assignedUserId === user.id;
+
+              return (
+                <div key={report.id} className="pp-card" style={{ display: "flex", flexDirection: "column", gap: 10, borderColor: isAssignedToMe ? "var(--sage)" : "var(--line)" }}>
+                  <div style={{ display: "flex", gap: 12 }}>
+                    {report.photoUrl ? (
+                      <img src={report.photoUrl} alt="Reported animal" style={{ width: 80, height: 80, borderRadius: 12, objectFit: "cover" }} />
+                    ) : (
+                      <div className="pp-thumb" style={{ width: 80, height: 80, background: "var(--bg)", borderRadius: 12, display: "grid", placeItems: "center", fontSize: 28 }}>🐾</div>
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
+                        <span className="pp-fred" style={{ fontWeight: 800, fontSize: 14.5 }}>Report #{report.id}</span>
+                        {report.status === "assigned" ? (
+                          <span className="pp-pill" style={{ background: isAssignedToMe ? "var(--sage-soft)" : "var(--amber-soft)", color: isAssignedToMe ? "var(--sage)" : "var(--amber-deep)", padding: "2px 8px", fontSize: 11 }}>
+                            {isAssignedToMe ? "Assigned to you" : `Assigned: ${report.assignedUserName}`}
+                          </span>
+                        ) : (
+                          <span className="pp-pill" style={{ background: "var(--sos-soft)", color: "var(--sos)", padding: "2px 8px", fontSize: 11 }}>
+                            Pending Help
+                          </span>
+                        )}
+                      </div>
+                      <div className="pp-sub" style={{ fontSize: 12, marginTop: 4 }}>
+                        {new Date(report.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 6 }}>
+                        {report.tags.map(tag => (
+                          <span key={tag} className="pp-pill" style={{ background: "var(--bg)", color: "var(--ink-soft)", fontSize: 10, padding: "2px 6px" }}>{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {report.notes && (
+                    <div className="pp-sub" style={{ fontSize: 12.5, fontStyle: "italic", background: "var(--bg)", padding: 8, borderRadius: 8 }}>
+                      &ldquo;{report.notes}&rdquo;
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: 12, color: "var(--ink-soft)" }}>
+                    📍 Coordinates: {Number(report.latitude).toFixed(5)}, {Number(report.longitude).toFixed(5)}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    {report.status === "pending" && (
+                      <button className="pp-btn pp-btn-amber" style={{ padding: "10px 14px", fontSize: 13, flex: 1 }} onClick={() => handleAssignReport(report.id)}>
+                        Accept Dispatch
+                      </button>
+                    )}
+                    {isAssignedToMe && (
+                      <>
+                        <button className="pp-btn pp-btn-sos" style={{ padding: "10px 14px", fontSize: 13, flex: 1 }} onClick={() => handleResolveReport(report.id)}>
+                          Mark as Resolved
+                        </button>
+                        <button className="pp-btn pp-btn-ghost" style={{ padding: "10px 14px", fontSize: 13, border: "1.5px solid var(--line)" }} onClick={() => handleUnassignReport(report.id)}>
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (sent) {
     return (
