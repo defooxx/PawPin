@@ -102,10 +102,15 @@ export async function ensureFeaturesSchema() {
       table.float("longitude").notNullable();
       table.string("area", 200).defaultTo(""); // human-readable area name
       table.string("status", 20).notNullable().defaultTo("open"); // open | reunited
+      table.integer("assignedUserId");
       table.boolean("isPaid").notNullable().defaultTo(false);
       table.timestamp("createdAt").defaultTo(db.fn.now());
       table.timestamp("updatedAt").defaultTo(db.fn.now());
     });
+  } else {
+    if (!await db.schema.hasColumn("lost_posts", "assignedUserId")) {
+      await db.schema.alterTable("lost_posts", (table) => table.integer("assignedUserId"));
+    }
   }
 
   // Animal cruelty reports
@@ -218,34 +223,177 @@ router.get("/vets", async (req, res) => {
  * Public map data. Rescue coordinates are rounded to avoid exposing an exact
  * animal location; approved responders use the protected moderation routes.
  */
-router.get("/map/pins", async (req, res) => {
+router.get("/map/pins", optionalAuth, async (req, res) => {
   const [reports, lostPosts] = await Promise.all([
-    db("reports")
-      .whereIn("status", ["pending", "review"])
-      .select("id", "latitude", "longitude", "tags", "status", "createdAt")
-      .orderBy("createdAt", "desc")
+    db("reports as r")
+      .leftJoin("users as u", "r.assignedUserId", "u.id")
+      .whereIn("r.status", ["pending", "review", "assigned"])
+      .select(
+        "r.id", "r.latitude", "r.longitude", "r.tags", "r.status", "r.createdAt",
+        "r.userId", "r.assignedUserId", "u.name as assignedUserName"
+      )
+      .orderBy("r.createdAt", "desc")
       .limit(100),
     db("lost_posts as post")
       .join("users as user", "post.userId", "user.id")
-      .where("post.status", "open")
+      .leftJoin("users as rescuer", "post.assignedUserId", "rescuer.id")
+      .whereIn("post.status", ["open", "assigned"])
       .select(
         "post.id", "post.type", "post.petName", "post.species", "post.latitude",
-        "post.longitude", "post.area", "post.createdAt", "user.name as postedBy",
+        "post.longitude", "post.area", "post.createdAt", "post.userId",
+        "post.assignedUserId", "user.name as postedBy", "rescuer.name as assignedUserName"
       )
       .orderBy("post.createdAt", "desc")
       .limit(100),
   ]);
 
   res.json([
-    ...reports.map((report) => ({
-      ...report,
-      kind: "rescue",
-      latitude: Number(Number(report.latitude).toFixed(3)),
-      longitude: Number(Number(report.longitude).toFixed(3)),
-      tags: JSON.parse(report.tags),
-    })),
-    ...lostPosts.map((post) => ({ ...post, kind: "lost" })),
+    ...reports.map((report) => {
+      const isOwnerOrAssigned = req.user && (report.userId === req.user.id || report.assignedUserId === req.user.id);
+      return {
+        ...report,
+        kind: "rescue",
+        latitude: isOwnerOrAssigned ? Number(report.latitude) : Number(Number(report.latitude).toFixed(3)),
+        longitude: isOwnerOrAssigned ? Number(report.longitude) : Number(Number(report.longitude).toFixed(3)),
+        tags: JSON.parse(report.tags),
+      };
+    }),
+    ...lostPosts.map((post) => {
+      const isOwnerOrAssigned = req.user && (post.userId === req.user.id || post.assignedUserId === req.user.id);
+      return {
+        ...post,
+        kind: "lost",
+        latitude: isOwnerOrAssigned ? Number(post.latitude) : Number(Number(post.latitude).toFixed(3)),
+        longitude: isOwnerOrAssigned ? Number(post.longitude) : Number(Number(post.longitude).toFixed(3)),
+      };
+    }),
   ]);
+});
+
+/**
+ * POST /map/pins/:kind/:id/assign
+ * Assign a rescuer to a rescue report or lost post.
+ */
+router.post("/map/pins/:kind/:id/assign", requireAuth, async (req, res) => {
+  const { kind, id } = req.params;
+  const pinId = Number.parseInt(id, 10);
+  if (!Number.isSafeInteger(pinId) || !["rescue", "lost"].includes(kind)) {
+    return res.status(400).json({ error: "Invalid request parameters" });
+  }
+
+  try {
+    if (kind === "rescue") {
+      const report = await db("reports").where({ id: pinId }).first();
+      if (!report) return res.status(404).json({ error: "Rescue report not found" });
+      if (report.assignedUserId) return res.status(400).json({ error: "Rescue report is already assigned" });
+
+      await db("reports").where({ id: pinId }).update({
+        assignedUserId: req.user.id,
+        status: "assigned",
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("pin-assigned", {
+          id: pinId,
+          kind: "rescue",
+          assignedUserId: req.user.id,
+          assignedUserName: req.user.name,
+          status: "assigned",
+        });
+      }
+
+      return res.json({ success: true, status: "assigned", assignedUserId: req.user.id, assignedUserName: req.user.name });
+    } else {
+      const post = await db("lost_posts").where({ id: pinId }).first();
+      if (!post) return res.status(404).json({ error: "Lost animal post not found" });
+      if (post.assignedUserId) return res.status(400).json({ error: "Lost animal post is already assigned" });
+
+      await db("lost_posts").where({ id: pinId }).update({
+        assignedUserId: req.user.id,
+        status: "assigned",
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("pin-assigned", {
+          id: pinId,
+          kind: "lost",
+          assignedUserId: req.user.id,
+          assignedUserName: req.user.name,
+          status: "assigned",
+        });
+      }
+
+      return res.json({ success: true, status: "assigned", assignedUserId: req.user.id, assignedUserName: req.user.name });
+    }
+  } catch (error) {
+    console.error("Assignment failed:", error.message);
+    res.status(500).json({ error: "Unable to assign rescuer" });
+  }
+});
+
+/**
+ * POST /map/pins/:kind/:id/unassign
+ * Unassign a rescuer from a rescue report or lost post.
+ */
+router.post("/map/pins/:kind/:id/unassign", requireAuth, async (req, res) => {
+  const { kind, id } = req.params;
+  const pinId = Number.parseInt(id, 10);
+  if (!Number.isSafeInteger(pinId) || !["rescue", "lost"].includes(kind)) {
+    return res.status(400).json({ error: "Invalid request parameters" });
+  }
+
+  try {
+    if (kind === "rescue") {
+      const report = await db("reports").where({ id: pinId }).first();
+      if (!report) return res.status(404).json({ error: "Rescue report not found" });
+      if (report.assignedUserId !== req.user.id && req.user.role !== "admin") {
+        return res.status(403).json({ error: "You are not assigned to this rescue" });
+      }
+
+      await db("reports").where({ id: pinId }).update({
+        assignedUserId: null,
+        status: "pending",
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("pin-unassigned", {
+          id: pinId,
+          kind: "rescue",
+          status: "pending",
+        });
+      }
+
+      return res.json({ success: true, status: "pending", assignedUserId: null, assignedUserName: null });
+    } else {
+      const post = await db("lost_posts").where({ id: pinId }).first();
+      if (!post) return res.status(404).json({ error: "Lost animal post not found" });
+      if (post.assignedUserId !== req.user.id && req.user.role !== "admin") {
+        return res.status(403).json({ error: "You are not assigned to this post" });
+      }
+
+      await db("lost_posts").where({ id: pinId }).update({
+        assignedUserId: null,
+        status: "open",
+      });
+
+      const io = req.app.get("io");
+      if (io) {
+        io.emit("pin-unassigned", {
+          id: pinId,
+          kind: "lost",
+          status: "open",
+        });
+      }
+
+      return res.json({ success: true, status: "open", assignedUserId: null, assignedUserName: null });
+    }
+  } catch (error) {
+    console.error("Unassignment failed:", error.message);
+    res.status(500).json({ error: "Unable to unassign rescuer" });
+  }
 });
 
 /**

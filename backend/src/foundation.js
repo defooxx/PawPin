@@ -190,8 +190,13 @@ export async function ensureFoundationSchema() {
     });
   }
 
-  if (await db.schema.hasTable("reports") && !await db.schema.hasColumn("reports", "userId")) {
-    await db.schema.alterTable("reports", (table) => table.integer("userId"));
+  if (await db.schema.hasTable("reports")) {
+    if (!await db.schema.hasColumn("reports", "userId")) {
+      await db.schema.alterTable("reports", (table) => table.integer("userId"));
+    }
+    if (!await db.schema.hasColumn("reports", "assignedUserId")) {
+      await db.schema.alterTable("reports", (table) => table.integer("assignedUserId"));
+    }
   }
 
   if (config.adminEmail && config.adminPassword) {

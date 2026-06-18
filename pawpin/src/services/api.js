@@ -50,3 +50,19 @@ export async function createReport({ photoUrl, location, tags }) {
   });
   return readResponse(response);
 }
+
+export async function assignPin(kind, id) {
+  const response = await fetch(`${API_BASE}/map/pins/${kind}/${id}/assign`, {
+    method: "POST",
+    headers: requestHeaders(),
+  });
+  return readResponse(response);
+}
+
+export async function unassignPin(kind, id) {
+  const response = await fetch(`${API_BASE}/map/pins/${kind}/${id}/unassign`, {
+    method: "POST",
+    headers: requestHeaders(),
+  });
+  return readResponse(response);
+}

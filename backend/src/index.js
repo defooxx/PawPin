@@ -40,6 +40,7 @@ const io = new SocketIOServer(server, {
     methods: ["GET", "POST"]
   }
 });
+app.set("io", io);
 
 const liveRescuers = new Map();
 
