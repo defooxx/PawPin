@@ -399,6 +399,7 @@ button:disabled { cursor: not-allowed; }
 .pp-consent-close { position: absolute; right: 10px; top: 10px; }
 .pp-location-sharing { color: var(--sage); font-size: 11.5px; font-weight: 700; margin: 7px 0 0; text-align: center; }
 .pp-location-confirmation { background: var(--surface); border: 1px solid var(--sage); border-radius: 14px; bottom: 12px; color: var(--sage); font-size: 11px; font-weight: 700; left: 50%; padding: 7px 11px; position: absolute; transform: translateX(-50%); white-space: nowrap; z-index: 900; }
+.pp-map-scroll { display: flex; flex-direction: column; padding: 0 !important; overflow: hidden !important; }
 
 @keyframes beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }

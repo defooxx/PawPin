@@ -33,7 +33,7 @@ export function AppShell({ activeTab, children, onAccount, onDonate, onTabChange
             </div>
           </header>}
 
-          <main className={`pp-scroll${authMode ? " pp-auth-scroll" : ""}`}>{children}</main>
+          <main className={`pp-scroll${authMode ? " pp-auth-scroll" : ""}${activeTab === "map" ? " pp-map-scroll" : ""}`}>{children}</main>
 
           {toast && <div className="pp-toast" role="status"><Check size={17} color="var(--amber)" />{toast}</div>}
 

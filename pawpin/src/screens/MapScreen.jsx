@@ -280,7 +280,7 @@ export function MapScreen({ user, toast }) {
   };
 
   return (
-    <div style={{ margin: "-16px -16px -22px", display: "flex", flexDirection: "column", position: "relative" }}>
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", position: "relative", height: "100%" }}>
 
       {/* Filter bar */}
       <div style={{
@@ -321,7 +321,7 @@ export function MapScreen({ user, toast }) {
       </div>
 
       {/* Map container — Leaflet mounts here */}
-      <div ref={containerRef} style={{ height: 510 }} />
+      <div ref={containerRef} style={{ flex: 1, minHeight: 0 }} />
       {userLocation && (
         <div className="pp-location-confirmation">
           Your location: {userLocation.latitude.toFixed(5)}, {userLocation.longitude.toFixed(5)}
