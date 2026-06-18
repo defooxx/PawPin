@@ -73,6 +73,9 @@ function tokenTtl() {
   return value;
 }
 
+const defaultGoogleClientId = "42042976343-vud0kj1nu9rbus6hi2mv7ithloeu77m3.apps.googleusercontent.com";
+const defaultFirebaseProjectId = "pawpin-fe504";
+
 export const config = Object.freeze({
   port: positiveInteger("PORT", 4000),
   frontendUrl: optional("FRONTEND_URL"),
@@ -94,7 +97,7 @@ export const config = Object.freeze({
   authTokenTtl: tokenTtl(),
   authOneTimeTokenMinutes: positiveInteger("AUTH_ONE_TIME_TOKEN_MINUTES", 30),
   exposeAuthTokens: boolean("EXPOSE_AUTH_TOKENS", false),
-  googleClientId: optional("GOOGLE_CLIENT_ID"),
+  googleClientId: optional("GOOGLE_CLIENT_ID") || defaultGoogleClientId,
   adminEmail: optional("ADMIN_EMAIL")?.toLowerCase() || null,
   adminPassword: optional("ADMIN_PASSWORD"),
   cloudinary: Object.freeze({
@@ -108,7 +111,7 @@ export const config = Object.freeze({
   }),
   firebase: Object.freeze({
     serviceAccountJson: optional("FIREBASE_SERVICE_ACCOUNT_JSON"),
-    projectId: optional("FIREBASE_PROJECT_ID"),
+    projectId: optional("FIREBASE_PROJECT_ID") || defaultFirebaseProjectId,
     clientEmail: optional("FIREBASE_CLIENT_EMAIL"),
     privateKey: optional("FIREBASE_PRIVATE_KEY")?.replace(/\\n/g, "\n"),
   }),

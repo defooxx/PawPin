@@ -3,7 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { v2 as cloudinary } from "cloudinary";
 import db from "./db.js";
 import { config } from "./config.js";
-import { adminAuth } from "./firebase-admin.js";
+import { isFirebasePhoneAuthConfigured, verifyFirebasePhoneIdToken } from "./firebase-admin.js";
 import {
   hashPassword,
   isGoogleAuthConfigured,
@@ -209,7 +209,7 @@ router.get("/auth/status", (req, res) => {
       backendConfigured: isGoogleAuthConfigured(),
     },
     firebasePhone: {
-      backendConfigured: Boolean(adminAuth),
+      backendConfigured: isFirebasePhoneAuthConfigured(),
     },
   });
 });
@@ -378,11 +378,11 @@ router.post("/auth/google", authRateLimit, async (req, res) => {
 });
 
 router.post("/auth/firebase-phone", authRateLimit, async (req, res) => {
-  if (!adminAuth) return res.status(503).json({ error: "Phone auth not configured" });
+  if (!isFirebasePhoneAuthConfigured()) return res.status(503).json({ error: "Phone auth not configured" });
   const { idToken, name, location } = req.body || {};
   if (typeof idToken !== "string" || !idToken) return res.status(400).json({ error: "Missing Firebase ID token" });
   try {
-    const decoded = await adminAuth.verifyIdToken(idToken);
+    const decoded = await verifyFirebasePhoneIdToken(idToken);
     const phoneNumber = decoded.phone_number;
     if (!phoneNumber) return res.status(400).json({ error: "Token does not contain a phone number" });
 
