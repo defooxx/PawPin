@@ -6,6 +6,7 @@ import { config } from "./config.js";
 import { adminAuth } from "./firebase-admin.js";
 import {
   hashPassword,
+  isGoogleAuthConfigured,
   issueToken,
   publicUser,
   requireAuth,
@@ -201,6 +202,18 @@ export async function ensureFoundationSchema() {
   }
 }
 
+router.get("/auth/status", (req, res) => {
+  res.json({
+    emailPassword: true,
+    google: {
+      backendConfigured: isGoogleAuthConfigured(),
+    },
+    firebasePhone: {
+      backendConfigured: Boolean(adminAuth),
+    },
+  });
+});
+
 router.post("/auth/register", authRateLimit, async (req, res) => {
   const email = cleanEmail(req.body?.email);
   const password = req.body?.password;
@@ -328,6 +341,9 @@ router.post("/auth/reset-password", authRateLimit, async (req, res) => {
 });
 
 router.post("/auth/google", authRateLimit, async (req, res) => {
+  if (!isGoogleAuthConfigured()) {
+    return res.status(503).json({ error: "Google sign-in is not configured on the backend." });
+  }
   try {
     const payload = await verifyGoogleCredential(req.body?.credential);
     const email = cleanEmail(payload.email);

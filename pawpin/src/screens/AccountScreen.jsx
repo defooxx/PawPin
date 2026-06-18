@@ -6,6 +6,7 @@ import {
 import { GoogleLogin } from "@react-oauth/google";
 import {
   getApplications,
+  getAuthStatus,
   googleLogin,
   firebasePhoneLogin,
   login,
@@ -338,10 +339,27 @@ function PhoneAuthFlow({ onAuthenticated, onBack, toast }) {
 // onAuthenticated(user, isNewUser) — caller decides whether to navigate or show profile setup
 function AuthLanding({ onAuthenticated, toast }) {
   const [mode, setMode] = useState("landing"); // landing | email | phone
+  const [authStatus, setAuthStatus] = useState(null);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-  const missingGoogle = () => toast("Google sign-in is not configured yet.");
+  const googleBackendReady = authStatus?.google?.backendConfigured !== false;
+  const phoneBackendReady = authStatus?.firebasePhone?.backendConfigured !== false;
+  const googleReady = Boolean(googleClientId) && googleBackendReady;
+  const phoneReady = isFirebaseConfigured && phoneBackendReady;
+
+  useEffect(() => {
+    getAuthStatus()
+      .then(setAuthStatus)
+      .catch(() => setAuthStatus(null));
+  }, []);
+
+  const missingGoogle = () => {
+    if (!googleClientId) return toast("Google needs VITE_GOOGLE_CLIENT_ID in Vercel.");
+    if (!googleBackendReady) return toast("Google needs GOOGLE_CLIENT_ID in Railway.");
+    return toast("Google sign-in is not ready yet.");
+  };
   const startPhone = () => {
-    if (!isFirebaseConfigured) return toast("Phone sign-in is not configured yet.");
+    if (!isFirebaseConfigured) return toast("Phone OTP needs Firebase Vercel env vars.");
+    if (!phoneBackendReady) return toast("Phone OTP needs Firebase Admin config in Railway.");
     setMode("phone");
   };
 
@@ -381,14 +399,14 @@ function AuthLanding({ onAuthenticated, toast }) {
       </div>
 
       <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
-        <button type="button" className="pp-auth-choice google" onClick={googleClientId ? undefined : missingGoogle}>
+        <button type="button" className="pp-auth-choice google" onClick={googleReady ? undefined : missingGoogle}>
           <div className="pp-auth-choice-icon">G</div>
           <div>
             <b>Continue with Google</b>
             <span>Quick sign in with your Google account</span>
           </div>
           <ChevronRight size={20} />
-          {googleClientId && <div className="pp-google-hitarea">
+          {googleReady && <div className="pp-google-hitarea">
             <GoogleLogin
               onSuccess={(response) => finishGoogleLogin(response.credential)}
               onError={() => toast("Google sign-in failed")}
@@ -421,9 +439,11 @@ function AuthLanding({ onAuthenticated, toast }) {
           <ChevronRight size={20} />
         </button>
 
-        {(!googleClientId || !isFirebaseConfigured) && <div className="pp-auth-config-note">
-          {!googleClientId && <span>Google needs its Vercel client ID.</span>}
-          {!isFirebaseConfigured && <span>Phone OTP needs Firebase env vars.</span>}
+        {(!googleReady || !phoneReady) && <div className="pp-auth-config-note">
+          {!googleClientId && <span>Google needs VITE_GOOGLE_CLIENT_ID in Vercel.</span>}
+          {googleClientId && !googleBackendReady && <span>Google needs GOOGLE_CLIENT_ID in Railway.</span>}
+          {!isFirebaseConfigured && <span>Phone OTP needs Firebase env vars in Vercel.</span>}
+          {isFirebaseConfigured && !phoneBackendReady && <span>Phone OTP needs Firebase Admin config in Railway.</span>}
         </div>}
       </div>
 

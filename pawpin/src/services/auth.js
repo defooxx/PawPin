@@ -65,6 +65,8 @@ export const resetPassword = (details) => request("/auth/reset-password", {
   body: JSON.stringify(details),
 });
 
+export const getAuthStatus = () => request("/auth/status");
+
 export const getMe = () => request("/me");
 
 export const updateProfile = (details) => request("/me", {

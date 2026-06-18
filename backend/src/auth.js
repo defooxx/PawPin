@@ -6,6 +6,10 @@ import { config } from "./config.js";
 
 const googleClient = config.googleClientId ? new OAuth2Client(config.googleClientId) : null;
 
+export function isGoogleAuthConfigured() {
+  return Boolean(googleClient);
+}
+
 export function publicUser(user) {
   const isSyntheticEmail = typeof user.email === "string" && user.email.endsWith("@pawpin.internal");
   return {
