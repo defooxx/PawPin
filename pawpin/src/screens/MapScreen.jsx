@@ -5,6 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
+import { io } from "socket.io-client";
 import { LocationChoiceDialog } from "../components/LocationChoiceDialog.jsx";
 import { getCurrentLocation, stopWatchingLocation, watchCurrentLocation } from "../services/location.js";
 
@@ -52,11 +53,13 @@ const ICONS = {
   user:   makeIcon("#3E987C"),
 };
 
-export function MapScreen({ toast }) {
+export function MapScreen({ user, toast }) {
   const containerRef = useRef(null);
   const mapRef       = useRef(null);
   const markersRef   = useRef([]);
   const userMarkerRef = useRef(null);
+  const socketRef     = useRef(null);
+  const activeRescuersRef = useRef({});
 
   const [filter, setFilter]       = useState("all");
   const [rescuePins, setRescuePins] = useState([]);
@@ -66,6 +69,46 @@ export function MapScreen({ toast }) {
   const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
   const watchRef = useRef(null);
+
+  const updateRescuerMarker = (rescuer) => {
+    if (!mapRef.current) return;
+    const { userId, name, role, latitude, longitude } = rescuer;
+    const coords = [latitude, longitude];
+    
+    // Choose icon color based on role
+    let color = "#3E987C"; // Default teal
+    if (role === "admin") color = "#E84C35"; // Red
+    else if (role === "shelter") color = "#F5A623"; // Amber
+    
+    const icon = L.divIcon({
+      className: "",
+      html: `<div style="
+        width:22px;height:22px;border-radius:50% 50% 50% 0;
+        background:${color};border:2.5px solid #fff;
+        box-shadow:0 2px 6px rgba(0,0,0,.4);
+        transform:rotate(-45deg);
+        display:flex;align-items:center;justify-content:center;
+      "><span style="transform:rotate(45deg);font-size:10px;">🐾</span></div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 22],
+      popupAnchor: [0, -24],
+    });
+
+    if (activeRescuersRef.current[userId]) {
+      activeRescuersRef.current[userId].setLatLng(coords);
+    } else {
+      activeRescuersRef.current[userId] = L.marker(coords, { icon })
+        .bindPopup(`<strong>${escapeHtml(name)}</strong><br/><span style="font-size:11px;color:#666">${escapeHtml(role)} (Live)</span>`)
+        .addTo(mapRef.current);
+    }
+  };
+
+  const removeRescuerMarker = (userId) => {
+    if (activeRescuersRef.current[userId]) {
+      activeRescuersRef.current[userId].remove();
+      delete activeRescuersRef.current[userId];
+    }
+  };
 
   const showUserLocation = (location, animate = true) => {
     if (!mapRef.current) return;
@@ -82,6 +125,18 @@ export function MapScreen({ toast }) {
   const stopSharing = () => {
     stopWatchingLocation(watchRef.current);
     watchRef.current = null;
+    
+    if (socketRef.current) {
+      socketRef.current.emit("stop-sharing");
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+
+    // Clean up other rescuers' markers
+    Object.keys(activeRescuersRef.current).forEach((userId) => {
+      removeRescuerMarker(userId);
+    });
+
     setSharingLocation(false);
     setLocating(false);
   };
@@ -99,6 +154,10 @@ export function MapScreen({ toast }) {
 
     return () => {
       stopWatchingLocation(watchRef.current);
+      if (socketRef.current) {
+        socketRef.current.emit("stop-sharing");
+        socketRef.current.disconnect();
+      }
       map.remove();
       mapRef.current = null;
     };
@@ -166,10 +225,41 @@ export function MapScreen({ toast }) {
     setLocating(true);
     try {
       if (mode === "share") {
+        // Establish Socket.io connection to backend
+        const socket = io(API_BASE);
+        socketRef.current = socket;
+
+        // Listen to active rescuers and updates
+        socket.on("active-rescuers", (rescuers) => {
+          rescuers.forEach((rescuer) => {
+            if (rescuer.userId === user?.id) return;
+            updateRescuerMarker(rescuer);
+          });
+        });
+
+        socket.on("location-updated", (rescuer) => {
+          if (rescuer.userId === user?.id) return;
+          updateRescuerMarker(rescuer);
+        });
+
+        socket.on("rescuer-left", ({ userId }) => {
+          removeRescuerMarker(userId);
+        });
+
         let firstUpdate = true;
         watchRef.current = watchCurrentLocation(
           (location) => {
             showUserLocation(location, firstUpdate);
+
+            // Emit location coordinates to other rescuers
+            socket.emit("update-location", {
+              userId: user?.id || "anonymous",
+              name: user?.name || "Anonymous Rescuer",
+              role: user?.role || "user",
+              latitude: location.latitude,
+              longitude: location.longitude,
+            });
+
             firstUpdate = false;
             setSharingLocation(true);
             setLocating(false);

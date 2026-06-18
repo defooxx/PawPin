@@ -3,6 +3,8 @@ import express from "express";
 import cors from "cors";
 import crypto from "crypto";
 import helmet from "helmet";
+import http from "http";
+import { Server as SocketIOServer } from "socket.io";
 import { rateLimit } from "express-rate-limit";
 import db, { databaseMode } from "./db.js";
 import { config } from "./config.js";
@@ -25,6 +27,51 @@ function stripHtml(value) {
 }
 
 const app = express();
+const server = http.createServer(app);
+const io = new SocketIOServer(server, {
+  cors: {
+    origin(origin, callback) {
+      if (!origin || config.corsOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin not allowed"));
+    },
+    methods: ["GET", "POST"]
+  }
+});
+
+const liveRescuers = new Map();
+
+io.on("connection", (socket) => {
+  console.log(`Socket connected: ${socket.id}`);
+
+  socket.on("update-location", (data) => {
+    if (!data.userId || !data.latitude || !data.longitude) return;
+    liveRescuers.set(socket.id, data);
+    socket.broadcast.emit("location-updated", data);
+  });
+
+  socket.on("stop-sharing", () => {
+    const rescuer = liveRescuers.get(socket.id);
+    if (rescuer) {
+      liveRescuers.delete(socket.id);
+      socket.broadcast.emit("rescuer-left", { userId: rescuer.userId });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log(`Socket disconnected: ${socket.id}`);
+    const rescuer = liveRescuers.get(socket.id);
+    if (rescuer) {
+      liveRescuers.delete(socket.id);
+      socket.broadcast.emit("rescuer-left", { userId: rescuer.userId });
+    }
+  });
+
+  socket.emit("active-rescuers", Array.from(liveRescuers.values()));
+});
+
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
@@ -363,7 +410,7 @@ app.use((error, req, res, next) => {
 ensureSchema()
   .then(ensureFoundationSchema)
   .then(ensureFeaturesSchema)
-  .then(() => app.listen(config.port, '0.0.0.0', () => {
+  .then(() => server.listen(config.port, '0.0.0.0', () => {
     console.log(`PawPin backend listening on port ${config.port} using ${databaseMode}`);
   }))
   .catch((err) => {

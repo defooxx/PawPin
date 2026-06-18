@@ -75,7 +75,7 @@ export default function App() {
       {tab === "home" && <HomeScreen go={navigate} donate={() => ping("Donation sent — thank you! 💛")} />}
       {tab === "rescue" && <RescueScreen toast={ping} />}
       {tab === "lost" && <LostScreen toast={ping} />}
-      {tab === "map" && <MapScreen toast={ping} />}
+      {tab === "map" && <MapScreen user={accountData?.user} toast={ping} />}
       {tab === "adopt" && <AdoptScreen />}
       {tab === "health" && <HealthScreen />}
       {tab === "account" && <AccountScreen
