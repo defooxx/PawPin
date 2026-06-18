@@ -1,10 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Building2, Check, ChevronRight, Eye, EyeOff, FileCheck2, LogOut, Mail,
   ShieldCheck, Stethoscope, UserRound,
 } from "lucide-react";
+import { GoogleLogin } from "@react-oauth/google";
 import {
   getApplications,
+  getAuthStatus,
+  googleLogin,
+  firebasePhoneLogin,
   login,
   register,
   requestPasswordReset,
@@ -14,6 +18,7 @@ import {
   uploadApplicationDocument,
   uploadProfilePhoto,
 } from "../services/auth.js";
+import { auth, isFirebaseConfigured, RecaptchaVerifier, signInWithPhoneNumber } from "../services/firebase.js";
 import { fade } from "../data.js";
 
 function Field({ label, ...props }) {
@@ -26,6 +31,13 @@ function SelectField({ label, children, ...props }) {
 
 function AuthIcon({ children, tone = "amber" }) {
   return <div className={`pp-auth-icon ${tone}`}>{children}</div>;
+}
+
+function maskPhone(number) {
+  const digits = number.replace(/\D/g, "");
+  if (!digits) return "+977 98xxxxxxxx";
+  const local = digits.replace(/^977/, "");
+  return `+977 ${local.slice(0, 2)}${"x".repeat(Math.max(0, local.length - 2))}`;
 }
 
 const nepalPlaces = [
@@ -109,8 +121,8 @@ function PasswordField({ label, value, onChange, placeholder = "Password", autoC
   );
 }
 
-function EmailAuthFlow({ initialMode = "login", onAuthenticated, onBack, toast }) {
-  const [mode, setMode] = useState(initialMode);
+function EmailAuthFlow({ onAuthenticated, onBack, toast }) {
+  const [mode, setMode] = useState("login");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     email: "",
@@ -200,16 +212,181 @@ function EmailAuthFlow({ initialMode = "login", onAuthenticated, onBack, toast }
   );
 }
 
-// Landing — keep email/password as the primary, reliable auth path.
+// Phone OTP flow — onAuthenticated(user, isNewUser) called when OTP confirmed
+function PhoneAuthFlow({ onAuthenticated, onBack, toast }) {
+  const [step, setStep] = useState("phone"); // phone | otp
+  const [phoneLocal, setPhoneLocal] = useState("");
+  const [otp, setOtp] = useState("");
+  const [loading, setLoading] = useState(false);
+  const confirmationRef = useRef(null);
+  const recaptchaRef = useRef(null);
+
+  // Render invisible reCAPTCHA
+  useEffect(() => {
+    if (!auth) return undefined;
+    if (!recaptchaRef.current) {
+      recaptchaRef.current = new RecaptchaVerifier(auth, "recaptcha-container", { size: "invisible" });
+    }
+    return () => {
+      try { recaptchaRef.current?.clear(); } catch { /* ignore */ }
+      recaptchaRef.current = null;
+    };
+  }, []);
+
+  const sendOtp = async (event) => {
+    event.preventDefault();
+    if (!auth || !recaptchaRef.current) return toast("Phone sign-in is not configured yet.");
+    const digits = phoneLocal.replace(/\D/g, "");
+    if (digits.length < 9 || digits.length > 10) return toast("Enter a valid Nepal phone number (9 or 10 digits).");
+    const fullNumber = `+977${digits.replace(/^977/, "")}`;
+    setLoading(true);
+    try {
+      const confirmation = await signInWithPhoneNumber(auth, fullNumber, recaptchaRef.current);
+      confirmationRef.current = confirmation;
+      setStep("otp");
+      toast("OTP sent to " + fullNumber);
+    } catch (error) {
+      console.error("Send OTP error:", error);
+      toast(error.message?.includes("too-many-requests") ? "Too many attempts. Please wait and try again." : "Could not send OTP. Check the number and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOtp = async (event) => {
+    event.preventDefault();
+    if (!otp.trim() || otp.length < 6) return toast("Enter the 6-digit OTP.");
+    setLoading(true);
+    try {
+      const result = await confirmationRef.current.confirm(otp.trim());
+      const idToken = await result.user.getIdToken();
+      const session = await firebasePhoneLogin(idToken);
+      onAuthenticated(session.user, session.isNewUser);
+    } catch (error) {
+      console.error("Verify OTP error:", error);
+      toast(error.message?.includes("invalid-verification-code") ? "Incorrect OTP. Please try again." : "Verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (step === "otp") {
+    const otpDigits = otp.padEnd(6, " ").slice(0, 6).split("");
+    return (
+      <form className="pp-auth-flow" onSubmit={verifyOtp} style={fade}>
+        <div className="pp-auth-head">
+          <AuthIcon tone="sage">✉️</AuthIcon>
+          <h1 className="pp-auth-title">Check your SMS</h1>
+          <p className="pp-auth-sub">6-digit code sent to<br />{maskPhone(phoneLocal)}</p>
+        </div>
+        <label className="pp-otp-wrap">
+          <span className="pp-sr-only">6-digit OTP</span>
+          <input
+            value={otp}
+            onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+            aria-label="6-digit OTP"
+          />
+          <span className="pp-otp-boxes" aria-hidden="true">
+            {otpDigits.map((digit, index) => <span className={digit.trim() ? "filled" : ""} key={index}>{digit.trim() || "—"}</span>)}
+          </span>
+        </label>
+        <button className="pp-btn pp-btn-amber" disabled={loading || otp.length < 6}>
+          {loading ? "Verifying..." : "Verify →"}
+        </button>
+        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} disabled>
+          Resend in 0:45
+        </button>
+        <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={() => { setStep("phone"); setOtp(""); }}>
+          ← Wrong number?
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form className="pp-auth-flow" onSubmit={sendOtp} style={fade}>
+      <div className="pp-auth-head">
+        <AuthIcon>📱</AuthIcon>
+        <h1 className="pp-auth-title">Your number</h1>
+      </div>
+      <label className="pp-phone-entry">
+        <span>Nepal mobile number</span>
+        <div className="pp-phone-input">
+          <strong>🇳🇵 +977</strong>
+          <input
+            type="tel"
+            inputMode="numeric"
+            value={phoneLocal}
+            onChange={(event) => setPhoneLocal(event.target.value.replace(/[^\d\s\-]/g, ""))}
+            placeholder="98xxxxxxxx"
+            required
+          />
+        </div>
+      </label>
+      <div id="recaptcha-container" />
+      <button className="pp-btn pp-btn-amber" style={{ marginTop: 18 }} disabled={loading}>
+        {loading ? "Sending OTP..." : "Send code →"}
+      </button>
+      <button type="button" className="pp-btn pp-btn-ghost" style={{ marginTop: 9 }} onClick={onBack}>← Back</button>
+    </form>
+  );
+}
+
+// Landing — choose Google or Phone
 // onAuthenticated(user, isNewUser) — caller decides whether to navigate or show profile setup
 function AuthLanding({ onAuthenticated, toast }) {
-  const [mode, setMode] = useState("landing"); // landing | login | register
+  const [mode, setMode] = useState("landing"); // landing | email | phone
+  const [authStatus, setAuthStatus] = useState(null);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+  console.log("Google Client ID in AccountScreen.jsx:", googleClientId);
+  const googleBackendReady = authStatus?.google?.backendConfigured !== false;
+  const phoneBackendReady = authStatus?.firebasePhone?.backendConfigured !== false;
+  const googleReady = Boolean(googleClientId) && googleBackendReady;
+  const phoneReady = isFirebaseConfigured && phoneBackendReady;
 
-  if (mode !== "landing") {
+  useEffect(() => {
+    getAuthStatus()
+      .then(setAuthStatus)
+      .catch(() => setAuthStatus(null));
+  }, []);
+
+  const missingGoogle = () => {
+    if (!googleClientId) return toast("Google needs VITE_GOOGLE_CLIENT_ID in Vercel.");
+    if (!googleBackendReady) return toast("Google needs GOOGLE_CLIENT_ID in Railway.");
+    return toast("Google sign-in is not ready yet.");
+  };
+  const startPhone = () => {
+    if (!isFirebaseConfigured) return toast("Phone OTP needs Firebase Vercel env vars.");
+    if (!phoneBackendReady) return toast("Phone OTP needs Firebase Admin config in Railway.");
+    setMode("phone");
+  };
+
+  const finishGoogleLogin = async (credential) => {
+    try {
+      const session = await googleLogin(credential);
+      onAuthenticated(session.user, session.isNewUser);
+    } catch (error) {
+      toast(error.message);
+    }
+  };
+
+  if (mode === "phone") {
     return (
       <div style={fade}>
         <button className="pp-icobtn" style={{ marginBottom: 8 }} onClick={() => setMode("landing")} aria-label="Back"><ArrowLeft size={18} /></button>
-        <EmailAuthFlow initialMode={mode} onAuthenticated={onAuthenticated} onBack={() => setMode("landing")} toast={toast} />
+        <PhoneAuthFlow onAuthenticated={onAuthenticated} onBack={() => setMode("landing")} toast={toast} />
+      </div>
+    );
+  }
+
+  if (mode === "email") {
+    return (
+      <div style={fade}>
+        <button className="pp-icobtn" style={{ marginBottom: 8 }} onClick={() => setMode("landing")} aria-label="Back"><ArrowLeft size={18} /></button>
+        <EmailAuthFlow onAuthenticated={onAuthenticated} onBack={() => setMode("landing")} toast={toast} />
       </div>
     );
   }
@@ -223,27 +400,56 @@ function AuthLanding({ onAuthenticated, toast }) {
       </div>
 
       <div style={{ display: "grid", gap: 12, marginTop: 24 }}>
-        <button type="button" className="pp-auth-choice" onClick={() => setMode("login")}>
+        <button type="button" className="pp-auth-choice google" onClick={googleReady ? undefined : missingGoogle}>
+          <div className="pp-auth-choice-icon">G</div>
+          <div>
+            <b>Continue with Google</b>
+            <span>Quick sign in with your Google account</span>
+          </div>
+          <ChevronRight size={20} />
+          {googleReady && <div className="pp-google-hitarea">
+            <GoogleLogin
+              onSuccess={(response) => finishGoogleLogin(response.credential)}
+              onError={() => toast("Google sign-in failed")}
+              width="320"
+            />
+          </div>}
+        </button>
+
+        <button type="button" className="pp-auth-choice" onClick={() => setMode("email")}>
           <div className="pp-auth-choice-icon phone"><Mail size={18} /></div>
           <div>
-            <b>Log in</b>
-            <span>Use your email and password</span>
+            <b>Log in with email</b>
+            <span>Use email and password</span>
           </div>
           <ChevronRight size={20} />
         </button>
 
-        <button type="button" className="pp-auth-choice" onClick={() => setMode("register")}>
-          <div className="pp-auth-choice-icon phone"><UserRound size={18} /></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--muted)", fontSize: 13 }}>
+          <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+          or
+          <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+        </div>
+
+        <button type="button" className="pp-auth-choice" onClick={startPhone}>
+          <div className="pp-auth-choice-icon phone">📱</div>
           <div>
-            <b>Create account</b>
-            <span>Join as individual, shelter, or vet</span>
+            <b>Use Nepal phone number</b>
+            <span>NTC · Ncell · OTP via SMS</span>
           </div>
           <ChevronRight size={20} />
         </button>
+
+        {(!googleReady || !phoneReady) && <div className="pp-auth-config-note">
+          {!googleClientId && <span>Google needs VITE_GOOGLE_CLIENT_ID in Vercel.</span>}
+          {googleClientId && !googleBackendReady && <span>Google needs GOOGLE_CLIENT_ID in Railway.</span>}
+          {!isFirebaseConfigured && <span>Phone OTP needs Firebase env vars in Vercel.</span>}
+          {isFirebaseConfigured && !phoneBackendReady && <span>Phone OTP needs Firebase Admin config in Railway.</span>}
+        </div>}
       </div>
 
       <p className="pp-auth-foot">
-        Google and phone verification will come back after the foundation is stable.
+        No password needed. Ever.
       </p>
     </div>
   );

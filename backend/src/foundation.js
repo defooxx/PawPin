@@ -1,6 +1,7 @@
 import express from "express";
 import { rateLimit } from "express-rate-limit";
 import { v2 as cloudinary } from "cloudinary";
+import { uploadImage, uploadDocument } from "./upload-helper.js";
 import db from "./db.js";
 import { config } from "./config.js";
 import { isFirebasePhoneAuthConfigured, verifyFirebasePhoneIdToken } from "./firebase-admin.js";
@@ -63,12 +64,17 @@ async function signedDocuments(userId, urls) {
   const documents = await db("verification_documents")
     .where({ userId })
     .whereIn("url", urls);
-  return documents.map((document) => cloudinary.url(document.publicId, {
-    resource_type: document.resourceType,
-    type: "authenticated",
-    sign_url: true,
-    secure: true,
-  }));
+  return documents.map((document) => {
+    if (document.url.startsWith("http://")) {
+      return document.url;
+    }
+    return cloudinary.url(document.publicId, {
+      resource_type: document.resourceType,
+      type: "authenticated",
+      sign_url: true,
+      secure: true,
+    });
+  });
 }
 
 async function authResponse(user) {
@@ -261,7 +267,7 @@ router.post("/auth/register", authRateLimit, async (req, res) => {
   const emailResult = await sendVerificationEmail({ to: user.email, name: user.name, token });
   return res.status(201).json({
     ...await authResponse(user),
-    isNewUser: false,
+    isNewUser: true,
     verificationEmailSent: emailResult.sent,
   });
 });
@@ -461,11 +467,7 @@ router.post("/me/photo", requireAuth, async (req, res) => {
   if (!match || !bytes || bytes > config.maxImageBytes) {
     return res.status(400).json({ error: "Profile photo must be a JPEG, PNG, or WebP under 7 MB" });
   }
-  const uploaded = await cloudinary.uploader.upload(dataUrl, {
-    folder: "pawpin-profiles",
-    resource_type: "image",
-    type: "upload",
-  });
+  const uploaded = await uploadImage(dataUrl, "pawpin-profiles");
   await db("users").where({ id: req.user.id }).update({
     photoUrl: uploaded.secure_url,
     updatedAt: db.fn.now(),
@@ -483,11 +485,7 @@ router.post("/applications/documents", requireAuth, async (req, res) => {
   if (!match || !bytes || bytes > config.maxDocumentBytes) {
     return res.status(400).json({ error: "Document must be a PDF, JPEG, PNG, or WebP under 10 MB" });
   }
-  const uploaded = await cloudinary.uploader.upload(dataUrl, {
-    folder: "pawpin-verification",
-    resource_type: "auto",
-    type: "authenticated",
-  });
+  const uploaded = await uploadDocument(dataUrl, "pawpin-verification");
   await db("verification_documents").insert({
     userId: req.user.id,
     url: uploaded.secure_url,

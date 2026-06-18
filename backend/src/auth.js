@@ -5,6 +5,9 @@ import db from "./db.js";
 import { config } from "./config.js";
 
 const googleClient = config.googleClientId ? new OAuth2Client(config.googleClientId) : null;
+if (googleClient) {
+  OAuth2Client.CLOCK_SKEW_SECS_ = 86400; // Allow up to 24 hours clock skew for development
+}
 
 export function isGoogleAuthConfigured() {
   return Boolean(googleClient);

@@ -17,7 +17,7 @@ import {
   reporterIsSuspended,
   reporterKey,
 } from "./moderation.js";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadImage } from "./upload-helper.js";
 
 function stripHtml(value) {
   if (typeof value !== "string") return value;
@@ -27,7 +27,7 @@ function stripHtml(value) {
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({
   origin(origin, callback) {
     if (!origin || config.corsOrigins.includes(origin)) {
@@ -38,6 +38,7 @@ app.use(cors({
   },
 }));
 app.use(express.json({ limit: config.jsonLimit }));
+app.use("/uploads", express.static("./data/uploads"));
 app.use(rateLimit({
   windowMs: config.rateLimitWindowMs,
   limit: config.rateLimitMax,
@@ -61,13 +62,6 @@ const reportRateLimit = rateLimit({
   keyGenerator: reporterKey,
   standardHeaders: "draft-8",
   legacyHeaders: false,
-});
-
-cloudinary.config({
-  cloud_name: config.cloudinary.cloudName,
-  api_key: config.cloudinary.apiKey,
-  api_secret: config.cloudinary.apiSecret,
-  secure: true,
 });
 
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -167,11 +161,7 @@ app.post("/upload", uploadRateLimit, optionalAuth, async (req, res) => {
     }
 
     const fingerprint = await imageFingerprint(image.dataUrl.split(",")[1]);
-    const result = await cloudinary.uploader.upload(image.dataUrl, {
-      folder: "pawpin-reports",
-      resource_type: "image",
-      type: "upload",
-    });
+    const result = await uploadImage(image.dataUrl, "pawpin-reports");
 
     await db("image_uploads").insert({
       photoUrl: result.secure_url,
@@ -181,7 +171,7 @@ app.post("/upload", uploadRateLimit, optionalAuth, async (req, res) => {
 
     return res.json({ url: result.secure_url });
   } catch (err) {
-    console.error("Cloudinary upload failed:", err.message);
+    console.error("Upload failed:", err.message);
     return res.status(500).json({ error: "Upload failed" });
   }
 });
@@ -194,7 +184,7 @@ app.post("/reports", reportRateLimit, optionalAuth, async (req, res) => {
   const { photoUrl, latitude, longitude, tags, notes } = req.body;
   if (
     typeof photoUrl !== "string"
-    || !photoUrl.startsWith("https://")
+    || (!photoUrl.startsWith("https://") && !photoUrl.startsWith("http://"))
     || photoUrl.length > 2048
     || !validCoordinate(latitude, -90, 90)
     || !validCoordinate(longitude, -180, 180)
