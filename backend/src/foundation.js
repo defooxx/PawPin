@@ -201,14 +201,25 @@ export async function ensureFoundationSchema() {
 
   if (config.adminEmail && config.adminPassword) {
     const existing = await db("users").where({ email: config.adminEmail }).first();
+    const newHash = await hashPassword(config.adminPassword);
     if (!existing) {
       await db("users").insert({
         email: config.adminEmail,
-        passwordHash: await hashPassword(config.adminPassword),
+        passwordHash: newHash,
         name: "PawPin Admin",
         role: "admin",
         emailVerified: true,
       });
+    } else {
+      const match = await verifyPassword(config.adminPassword, existing.passwordHash);
+      if (!match) {
+        await db("users").where({ id: existing.id }).update({
+          passwordHash: newHash,
+          role: "admin",
+          updatedAt: db.fn.now(),
+        });
+        console.log("Admin password updated to match current env configuration.");
+      }
     }
   }
 }
