@@ -678,7 +678,7 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
 
       {data?.application
         ? <div className="pp-card" style={{ marginTop: 18 }}><b>{data.application.organizationName}</b><p className="pp-sub">Application status: {data.application.status}</p></div>
-        : profile.role === "user" && ["shelter", "vet"].includes(profile.accountType) && <div style={{ marginTop: 18 }}><ApplicationForm refresh={refresh} toast={toast} defaultType={profile.accountType} /></div>}
+        : profile.role === "user" && <div style={{ marginTop: 18 }}><ApplicationForm refresh={refresh} toast={toast} defaultType="shelter" /></div>}
       {profile.role === "admin" && <AdminPanel toast={toast} />}
     </div>
   );
