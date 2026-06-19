@@ -47,7 +47,7 @@ function validProfile({ name, photoUrl, location }) {
   return typeof name === "string"
     && name.trim().length >= 2
     && name.trim().length <= 100
-    && (photoUrl === undefined || photoUrl === "" || (typeof photoUrl === "string" && photoUrl.startsWith("https://") && photoUrl.length <= 2048))
+    && (photoUrl === undefined || photoUrl === "" || (typeof photoUrl === "string" && (photoUrl.startsWith("https://") || photoUrl.startsWith("http://")) && photoUrl.length <= 2048))
     && (location === undefined || location === "" || (typeof location === "string" && location.length <= 200));
 }
 
@@ -518,7 +518,7 @@ router.post("/applications", requireAuth, async (req, res) => {
     && typeof registrationNumber === "string" && registrationNumber.trim().length >= 2 && registrationNumber.length <= 100
     && typeof address === "string" && address.trim().length >= 5 && address.length <= 250
     && Array.isArray(documentUrls) && documentUrls.length > 0 && documentUrls.length <= 5
-    && documentUrls.every((url) => typeof url === "string" && url.startsWith("https://") && url.length <= 2048);
+    && documentUrls.every((url) => typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://")) && url.length <= 2048);
   if (!valid) return res.status(400).json({ error: "Complete all application fields and upload at least one document" });
   const ownedDocuments = await db("verification_documents")
     .where({ userId: req.user.id })

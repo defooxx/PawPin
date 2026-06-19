@@ -533,7 +533,7 @@ router.post("/lost", requireAuth, postRateLimit, async (req, res) => {
     !validTypes.has(type)
     || !validSpecies.has(species)
     || typeof description !== "string" || description.trim().length < 10 || description.length > 1000
-    || typeof photoUrl !== "string" || !photoUrl.startsWith("https://") || photoUrl.length > 2048
+    || typeof photoUrl !== "string" || !(photoUrl.startsWith("https://") || photoUrl.startsWith("http://")) || photoUrl.length > 2048
     || !validCoordinate(latitude, -90, 90)
     || !validCoordinate(longitude, -180, 180)
     || (petName && (typeof petName !== "string" || petName.length > 100))
@@ -608,7 +608,7 @@ router.post("/cruelty", optionalAuth, postRateLimit, async (req, res) => {
     typeof description !== "string" || description.trim().length < 10 || description.length > 2000
     || !validCoordinate(latitude, -90, 90)
     || !validCoordinate(longitude, -180, 180)
-    || (photoUrl && (typeof photoUrl !== "string" || !photoUrl.startsWith("https://") || photoUrl.length > 2048))
+    || (photoUrl && (typeof photoUrl !== "string" || !(photoUrl.startsWith("https://") || photoUrl.startsWith("http://")) || photoUrl.length > 2048))
     || (area && (typeof area !== "string" || area.length > 200))
   ) {
     return res.status(400).json({ error: "Describe what you saw and provide a location" });
@@ -739,7 +739,7 @@ router.post("/adopt", requireAuth, postRateLimit, async (req, res) => {
     !validSpecies.has(species)
     || typeof petName !== "string" || petName.trim().length < 1 || petName.length > 100
     || typeof description !== "string" || description.trim().length < 10 || description.length > 1000
-    || typeof photoUrl !== "string" || !photoUrl.startsWith("https://") || photoUrl.length > 2048
+    || typeof photoUrl !== "string" || !(photoUrl.startsWith("https://") || photoUrl.startsWith("http://")) || photoUrl.length > 2048
     || !Array.isArray(tags) || tags.length > 10
     || (breed && typeof breed !== "string") || breed.length > 100
     || (age && typeof age !== "string") || age.length > 50
