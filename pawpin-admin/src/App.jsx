@@ -446,7 +446,9 @@ function RescueReports({ toast }) {
       </div>
       {loading ? <div style={{ color: C.soft }}>Loading…</div> :
         reports.length === 0 ? <Card><div style={{ color: C.soft, textAlign: "center" }}>No {status} reports</div></Card> :
-        reports.map((report) => (
+        reports.map((report) => {
+          const tags = Array.isArray(report.tags) ? report.tags : JSON.parse(report.tags || "[]");
+          return (
           <Card key={report.id} style={{ marginBottom: 14 }}>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
               {report.photoUrl && (
@@ -462,8 +464,18 @@ function RescueReports({ toast }) {
                   📍 {report.latitude?.toFixed(4)}, {report.longitude?.toFixed(4)}
                 </div>
                 <div style={{ marginTop: 4, fontSize: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {JSON.parse(report.tags || "[]").map((tag) => <Badge key={tag} color={C.ink}>{tag}</Badge>)}
+                  {tags.map((tag) => <Badge key={tag} color={C.ink}>{tag}</Badge>)}
                 </div>
+                {(report.reporterName || report.reporterPhone || report.reporterAltContact) && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: C.ink, lineHeight: 1.5 }}>
+                    <b>Contact:</b> {report.reporterName || "Reporter"}
+                    {report.reporterPhone && ` · ${report.reporterPhone}`}
+                    {report.reporterAltContact && ` · ${report.reporterAltContact}`}
+                  </div>
+                )}
+                {report.lastStatusNote && (
+                  <div style={{ marginTop: 6, fontSize: 11, color: C.soft }}>Latest: {report.lastStatusNote}</div>
+                )}
                 {report.reviewReason && (
                   <div style={{ marginTop: 6, fontSize: 11, color: C.sos }}>⚠ {report.reviewReason}</div>
                 )}
@@ -480,7 +492,8 @@ function RescueReports({ toast }) {
               )}
             </div>
           </Card>
-        ))
+          );
+        })
       }
     </section>
   );

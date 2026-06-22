@@ -29,6 +29,23 @@ function SelectField({ label, children, ...props }) {
   return <label className="pp-field"><span>{label}</span><select {...props}>{children}</select></label>;
 }
 
+const REPORT_STATUS_LABELS = {
+  pending: "Pending help",
+  review: "Under review",
+  under_review: "Under review",
+  assigned: "Assigned",
+  on_the_way: "Responder on the way",
+  rescued: "Rescued",
+  at_vet_or_shelter: "At vet/shelter",
+  closed: "Closed",
+  false: "Marked false",
+  abusive: "Flagged abusive",
+};
+
+function reportStatusLabel(status) {
+  return REPORT_STATUS_LABELS[status] || status;
+}
+
 function AuthIcon({ children, tone = "amber" }) {
   return <div className={`pp-auth-icon ${tone}`}>{children}</div>;
 }
@@ -670,9 +687,33 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
       <h2 className="pp-h2" style={{ marginTop: 20 }}>Report history</h2>
       {!data?.reports?.length && <p className="pp-sub">Your signed-in rescue reports will appear here.</p>}
       {data?.reports?.map((report) => (
-        <div className="pp-listcard" style={{ marginTop: 8 }} key={report.id}>
-          <div style={{ flex: 1 }}><b>Report #{report.id}</b><div className="pp-sub">{report.tags.join(", ")}</div></div>
-          <span className="pp-pill" style={{ background: "var(--bg)" }}>{report.status}</span>
+        <div className="pp-card" style={{ marginTop: 10 }} key={report.id}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            {report.photoUrl && <img src={report.photoUrl} alt="Reported animal" style={{ width: 58, height: 58, objectFit: "cover", borderRadius: 12 }} />}
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <b>Report #{report.id}</b>
+                <span className="pp-pill" style={{ background: "var(--bg)" }}>{reportStatusLabel(report.status)}</span>
+              </div>
+              <div className="pp-sub" style={{ fontSize: 12, marginTop: 3 }}>{report.tags.join(", ")}</div>
+              {report.assignedUserName && <div className="pp-sub" style={{ fontSize: 12 }}>Responder: {report.assignedUserName}</div>}
+              {report.lastStatusNote && <div className="pp-sub" style={{ fontSize: 12, marginTop: 5 }}>Latest: {report.lastStatusNote}</div>}
+            </div>
+          </div>
+          {!!report.events?.length && (
+            <div style={{ marginTop: 10, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+              {report.events.map((event) => (
+                <div key={event.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 7 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 999, background: "var(--sage)", marginTop: 5, flexShrink: 0 }} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 800 }}>{reportStatusLabel(event.status)}</div>
+                    {event.note && <div className="pp-sub" style={{ fontSize: 11.5 }}>{event.note}</div>}
+                    <div className="pp-sub" style={{ fontSize: 11 }}>{new Date(event.createdAt).toLocaleString()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
 

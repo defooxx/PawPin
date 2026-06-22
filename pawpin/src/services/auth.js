@@ -6,6 +6,10 @@ export function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+export function getAuthToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,

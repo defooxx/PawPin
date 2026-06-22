@@ -83,8 +83,17 @@ export async function recordModeration({ report, action, reason, shelterId }) {
     const status = action === "clear" ? "pending" : action;
     await trx("reports").where({ id: report.id }).update({
       status,
+      lastStatusNote: action === "clear" ? "Report cleared for responder dispatch." : reason,
       reviewReason: action === "clear" ? null : reason,
       reviewedAt: trx.fn.now(),
+      updatedAt: trx.fn.now(),
+    });
+
+    await trx("report_status_events").insert({
+      reportId: report.id,
+      status,
+      note: action === "clear" ? "Report cleared for responder dispatch." : reason,
+      changedBy: null,
     });
 
     if ((action === "false" || action === "abusive") && !priorConfirmation) {

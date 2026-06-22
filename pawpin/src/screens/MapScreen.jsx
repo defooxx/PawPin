@@ -8,10 +8,11 @@ import L from "leaflet";
 import { io } from "socket.io-client";
 import { LocationChoiceDialog } from "../components/LocationChoiceDialog.jsx";
 import { getCurrentLocation, stopWatchingLocation, watchCurrentLocation } from "../services/location.js";
-import { authHeaders } from "../services/auth.js";
+import { authHeaders, getAuthToken } from "../services/auth.js";
 import { assignPin, unassignPin } from "../services/api.js";
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? "http://localhost:4000").replace(/\/$/, "");
+const RESCUE_RESPONDER_ROLES = new Set(["shelter", "vet", "admin"]);
 
 async function fetchJSON(path) {
   try {
@@ -78,6 +79,8 @@ export function MapScreen({ user, toast }) {
   const watchRef = useRef(null);
 
   const [rescuersData, setRescuersData] = useState({});
+  const [caseTracking, setCaseTracking] = useState(null);
+  const [trackingReady, setTrackingReady] = useState(false);
   const [eta, setEta] = useState(null);
 
   const routeLineRef = useRef(null);
@@ -85,6 +88,7 @@ export function MapScreen({ user, toast }) {
 
   const handleAssignRef = useRef(null);
   const handleUnassignRef = useRef(null);
+  const activeNavigationPinRef = useRef(null);
 
   const updateRescuerMarker = (rescuer) => {
     if (!mapRef.current) return;
@@ -225,6 +229,14 @@ export function MapScreen({ user, toast }) {
     // Initialize WebSockets
     const socket = io(API_BASE);
     socketRef.current = socket;
+    const token = getAuthToken();
+    if (token) {
+      socket.emit("authenticate", { token }, (result) => {
+        setTrackingReady(Boolean(result?.ok));
+      });
+    } else {
+      setTrackingReady(false);
+    }
 
     socket.on("active-rescuers", (rescuers) => {
       rescuers.forEach((rescuer) => {
@@ -240,6 +252,17 @@ export function MapScreen({ user, toast }) {
       if (rescuer.userId === user?.id) return;
       updateRescuerMarker(rescuer);
       setRescuersData(prev => ({ ...prev, [rescuer.userId]: rescuer }));
+    });
+
+    socket.on("case-location-updated", (rescuer) => {
+      if (rescuer.userId === user?.id) return;
+      updateRescuerMarker(rescuer);
+      setRescuersData(prev => ({ ...prev, [rescuer.userId]: rescuer }));
+      setCaseTracking(rescuer);
+    });
+
+    socket.on("case-location-stopped", ({ userId }) => {
+      setCaseTracking((current) => current?.userId === userId ? null : current);
     });
 
     socket.on("rescuer-left", ({ userId }) => {
@@ -269,6 +292,22 @@ export function MapScreen({ user, toast }) {
       }
     });
 
+    socket.on("pin-status-updated", ({ id, kind, status, lastStatusNote }) => {
+      const numId = Number(id);
+      if (kind === "rescue") {
+        setRescuePins((prev) => prev.map((p) => p.id === numId ? { ...p, status, lastStatusNote } : p).filter((p) => p.status !== "closed"));
+      }
+    });
+
+    socket.on("pin-resolved", ({ id, kind, status }) => {
+      const numId = Number(id);
+      if (kind === "rescue") {
+        setRescuePins((prev) => prev.map((p) => p.id === numId ? { ...p, status } : p).filter((p) => p.status !== "closed"));
+      } else {
+        setLostPins((prev) => prev.map((p) => p.id === numId ? { ...p, status } : p).filter((p) => p.status !== "reunited"));
+      }
+    });
+
     return () => {
       stopWatchingLocation(watchRef.current);
       socket.disconnect();
@@ -289,6 +328,16 @@ export function MapScreen({ user, toast }) {
   const activeAssignedRescue = rescuePins.find(p => p.assignedUserId && (p.userId === user?.id || p.assignedUserId === user?.id));
   const activeAssignedLost = lostPins.find(p => p.assignedUserId && (p.userId === user?.id || p.assignedUserId === user?.id));
   const activeNavigationPin = activeAssignedRescue || activeAssignedLost;
+  activeNavigationPinRef.current = activeNavigationPin;
+
+  useEffect(() => {
+    if (!socketRef.current || !trackingReady || !activeNavigationPin) return;
+    const trackingCase = { kind: activeNavigationPin.kind, id: activeNavigationPin.id };
+    socketRef.current.emit("join-case", trackingCase);
+    return () => {
+      socketRef.current?.emit("leave-case", trackingCase);
+    };
+  }, [trackingReady, activeNavigationPin?.kind, activeNavigationPin?.id]);
 
   let rescuerLat = null;
   let rescuerLng = null;
@@ -431,12 +480,16 @@ export function MapScreen({ user, toast }) {
           if (r.assignedUserId === user?.id) {
             popupHtml += `<button class="pp-popup-unassign-btn pp-btn pp-btn-ghost" style="padding:4px 8px;font-size:11px;margin-top:6px;width:100%;height:auto;" data-kind="rescue" data-id="${r.id}">Cancel Response</button>`;
           }
-        } else if (user) {
+        } else if (user && RESCUE_RESPONDER_ROLES.has(user.role) && r.status === "pending") {
           if (r.userId !== user.id) {
             popupHtml += `<button class="pp-popup-assign-btn pp-btn pp-btn-amber" style="padding:4px 8px;font-size:11px;margin-top:6px;width:100%;height:auto;color:#fff;" data-kind="rescue" data-id="${r.id}">Accept Rescue</button>`;
           } else {
             popupHtml += `<span style="font-size:11px;color:#999;font-weight:700;">Posted by you</span>`;
           }
+        } else if (user && RESCUE_RESPONDER_ROLES.has(user.role)) {
+          popupHtml += `<span style="font-size:10px;color:#999;">Status: ${escapeHtml(r.status)}</span>`;
+        } else if (user) {
+          popupHtml += `<span style="font-size:10px;color:#999;">Verified shelters or vets can accept rescues</span>`;
         } else {
           popupHtml += `<span style="font-size:10px;color:#999;">Log in to respond</span>`;
         }
@@ -502,12 +555,14 @@ export function MapScreen({ user, toast }) {
 
             // Emit location coordinates to other rescuers using the persistent socket connection
             if (socketRef.current) {
+              const activeCase = activeNavigationPinRef.current
+                ? { kind: activeNavigationPinRef.current.kind, id: activeNavigationPinRef.current.id }
+                : null;
               socketRef.current.emit("update-location", {
-                userId: user?.id || "anonymous",
-                name: user?.name || "Anonymous Rescuer",
-                role: user?.role || "user",
                 latitude: location.latitude,
                 longitude: location.longitude,
+                accuracy: location.accuracy,
+                activeCase,
               });
             }
 
@@ -530,7 +585,7 @@ export function MapScreen({ user, toast }) {
     }
   };
 
-  const userReports = rescuePins.filter(p => p.userId === user?.id && p.status !== "resolved" && p.status !== "abusive");
+  const userReports = rescuePins.filter(p => p.userId === user?.id && p.status !== "closed" && p.status !== "abusive");
   const userLostPosts = lostPins.filter(p => p.userId === user?.id && p.status !== "reunited");
   const allUserPins = [...userReports, ...userLostPosts];
 
@@ -598,6 +653,11 @@ export function MapScreen({ user, toast }) {
             🟢 {nearbyRescuersCount} nearby rescuer{nearbyRescuersCount !== 1 ? "s" : ""}
           </span>
         )}
+        {activeNavigationPin && (
+          <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: caseTracking || activeNavigationPin.assignedUserId === user?.id ? "var(--sage)" : "var(--ink-soft)", fontWeight: 700 }}>
+            {caseTracking || activeNavigationPin.assignedUserId === user?.id ? "Live tracking active" : "Waiting for live location"}
+          </span>
+        )}
       </div>
 
       {/* Map container — Leaflet mounts here */}
@@ -661,6 +721,11 @@ export function MapScreen({ user, toast }) {
                 {activeNavigationPin.kind === "rescue" ? `Rescue #${activeNavigationPin.id}` : `Lost: ${activeNavigationPin.petName}`}
                 {eta !== null && <span style={{ color: "var(--amber)", marginLeft: 8, fontWeight: 700 }}>~{eta} min</span>}
               </div>
+              {caseTracking?.updatedAt && activeNavigationPin.assignedUserId !== user?.id && (
+                <div style={{ fontSize: 10, color: "rgba(255,255,255,0.65)", marginTop: 2 }}>
+                  Live location updated {new Date(caseTracking.updatedAt).toLocaleTimeString()}
+                </div>
+              )}
             </div>
           </div>
         </div>

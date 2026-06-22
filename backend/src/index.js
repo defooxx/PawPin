@@ -8,7 +8,7 @@ import { Server as SocketIOServer } from "socket.io";
 import { rateLimit } from "express-rate-limit";
 import db, { databaseMode } from "./db.js";
 import { config } from "./config.js";
-import { optionalAuth } from "./auth.js";
+import { optionalAuth, resolveUser } from "./auth.js";
 import foundationRouter, { ensureFoundationSchema } from "./foundation.js";
 import featuresRouter, { ensureFeaturesSchema, awardPoints } from "./features.js";
 import {
@@ -44,13 +44,97 @@ app.set("io", io);
 
 const liveRescuers = new Map();
 
+function socketCaseRoom(kind, id) {
+  return `case:${kind}:${id}`;
+}
+
+async function canAccessCaseLocation(user, kind, id) {
+  if (!user || !Number.isSafeInteger(id) || !["rescue", "lost"].includes(kind)) return false;
+  if (user.role === "admin") return true;
+  if (kind === "rescue") {
+    const report = await db("reports").where({ id }).select("userId", "assignedUserId").first();
+    return Boolean(report && (report.userId === user.id || report.assignedUserId === user.id));
+  }
+  const post = await db("lost_posts").where({ id }).select("userId", "assignedUserId").first();
+  return Boolean(post && (post.userId === user.id || post.assignedUserId === user.id));
+}
+
+async function canShareCaseLocation(user, kind, id) {
+  if (!user || !Number.isSafeInteger(id) || !["rescue", "lost"].includes(kind)) return false;
+  if (kind === "rescue") {
+    const report = await db("reports").where({ id }).select("assignedUserId").first();
+    return Boolean(report && report.assignedUserId === user.id);
+  }
+  const post = await db("lost_posts").where({ id }).select("assignedUserId").first();
+  return Boolean(post && post.assignedUserId === user.id);
+}
+
 io.on("connection", (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
-  socket.on("update-location", (data) => {
-    if (!data.userId || !data.latitude || !data.longitude) return;
-    liveRescuers.set(socket.id, data);
-    socket.broadcast.emit("location-updated", data);
+  socket.on("authenticate", async ({ token } = {}, ack) => {
+    try {
+      socket.data.user = token ? await resolveUser(token) : null;
+      if (!socket.data.user) {
+        ack?.({ ok: false, error: "Invalid session" });
+        return;
+      }
+      ack?.({ ok: true, userId: socket.data.user.id });
+    } catch {
+      socket.data.user = null;
+      ack?.({ ok: false, error: "Invalid session" });
+    }
+  });
+
+  socket.on("join-case", async ({ kind, id } = {}, ack) => {
+    const pinId = Number.parseInt(id, 10);
+    try {
+      if (!await canAccessCaseLocation(socket.data.user, kind, pinId)) {
+        ack?.({ ok: false, error: "Not allowed to track this case" });
+        return;
+      }
+      socket.join(socketCaseRoom(kind, pinId));
+      ack?.({ ok: true });
+    } catch {
+      ack?.({ ok: false, error: "Unable to join case tracking" });
+    }
+  });
+
+  socket.on("leave-case", ({ kind, id } = {}) => {
+    const pinId = Number.parseInt(id, 10);
+    if (Number.isSafeInteger(pinId) && ["rescue", "lost"].includes(kind)) {
+      socket.leave(socketCaseRoom(kind, pinId));
+    }
+  });
+
+  socket.on("update-location", async (data = {}) => {
+    const user = socket.data.user;
+    const latitude = Number(data.latitude);
+    const longitude = Number(data.longitude);
+    const activeCase = data.activeCase || {};
+    const pinId = Number.parseInt(activeCase.id, 10);
+    const kind = activeCase.kind;
+    if (!user || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+    const location = {
+      userId: user.id,
+      name: user.name,
+      role: user.role,
+      latitude,
+      longitude,
+      accuracy: Number.isFinite(Number(data.accuracy)) ? Number(data.accuracy) : null,
+      updatedAt: new Date().toISOString(),
+    };
+    liveRescuers.set(socket.id, location);
+
+    if (await canShareCaseLocation(user, kind, pinId)) {
+      const caseLocation = { ...location, kind, id: pinId };
+      io.to(socketCaseRoom(kind, pinId)).emit("case-location-updated", caseLocation);
+      socket.broadcast.emit("location-updated", location);
+      return;
+    }
+
+    socket.broadcast.emit("location-updated", location);
   });
 
   socket.on("stop-sharing", () => {
@@ -58,6 +142,11 @@ io.on("connection", (socket) => {
     if (rescuer) {
       liveRescuers.delete(socket.id);
       socket.broadcast.emit("rescuer-left", { userId: rescuer.userId });
+      socket.rooms.forEach((room) => {
+        if (room.startsWith("case:")) {
+          io.to(room).emit("case-location-stopped", { userId: rescuer.userId });
+        }
+      });
     }
   });
 
@@ -135,6 +224,23 @@ function validTags(tags) {
     && tags.every((tag) => typeof tag === "string" && tag.trim().length > 0 && tag.length <= 60);
 }
 
+function validOptionalText(value, max) {
+  return value === undefined || value === null || (typeof value === "string" && value.trim().length <= max);
+}
+
+function validPhone(value) {
+  return typeof value === "string" && /^[+\d\s().-]{7,30}$/.test(value.trim());
+}
+
+async function recordReportStatusEvent(trx, { reportId, status, note = "", changedBy = null }) {
+  await trx("report_status_events").insert({
+    reportId,
+    status,
+    note: stripHtml(note || ""),
+    changedBy,
+  });
+}
+
 async function ensureSchema() {
   const exists = await db.schema.hasTable("reports");
   if (!exists) {
@@ -146,7 +252,13 @@ async function ensureSchema() {
       table.text("tags").notNullable();
       table.text("notes").defaultTo("");
       table.string("status").notNullable().defaultTo("pending");
+      table.string("reporterName", 100).defaultTo("");
+      table.string("reporterPhone", 30).defaultTo("");
+      table.string("reporterAltContact", 120).defaultTo("");
+      table.boolean("contactConsent").notNullable().defaultTo(false);
+      table.text("lastStatusNote").defaultTo("");
       table.timestamp("createdAt").defaultTo(db.fn.now());
+      table.timestamp("updatedAt").defaultTo(db.fn.now());
     });
   }
 
@@ -156,11 +268,28 @@ async function ensureSchema() {
     ["duplicateOfReportId", (table) => table.integer("duplicateOfReportId")],
     ["reviewReason", (table) => table.text("reviewReason")],
     ["reviewedAt", (table) => table.timestamp("reviewedAt")],
+    ["reporterName", (table) => table.string("reporterName", 100).defaultTo("")],
+    ["reporterPhone", (table) => table.string("reporterPhone", 30).defaultTo("")],
+    ["reporterAltContact", (table) => table.string("reporterAltContact", 120).defaultTo("")],
+    ["contactConsent", (table) => table.boolean("contactConsent").notNullable().defaultTo(false)],
+    ["lastStatusNote", (table) => table.text("lastStatusNote").defaultTo("")],
+    ["updatedAt", (table) => table.timestamp("updatedAt").defaultTo(db.fn.now())],
   ];
   for (const [column, addColumn] of reportColumns) {
     if (!await db.schema.hasColumn("reports", column)) {
       await db.schema.alterTable("reports", addColumn);
     }
+  }
+
+  if (!await db.schema.hasTable("report_status_events")) {
+    await db.schema.createTable("report_status_events", (table) => {
+      table.increments("id").primary();
+      table.integer("reportId").notNullable();
+      table.string("status", 40).notNullable();
+      table.text("note").defaultTo("");
+      table.integer("changedBy");
+      table.timestamp("createdAt").defaultTo(db.fn.now());
+    });
   }
 
   if (!await db.schema.hasTable("image_uploads")) {
@@ -229,7 +358,17 @@ app.get("/", (req, res) => {
 });
 
 app.post("/reports", reportRateLimit, optionalAuth, async (req, res) => {
-  const { photoUrl, latitude, longitude, tags, notes } = req.body;
+  const {
+    photoUrl,
+    latitude,
+    longitude,
+    tags,
+    notes,
+    reporterName,
+    reporterPhone,
+    reporterAltContact,
+    contactConsent,
+  } = req.body;
   if (
     typeof photoUrl !== "string"
     || (!photoUrl.startsWith("https://") && !photoUrl.startsWith("http://"))
@@ -238,8 +377,12 @@ app.post("/reports", reportRateLimit, optionalAuth, async (req, res) => {
     || !validCoordinate(longitude, -180, 180)
     || !validTags(tags)
     || (notes !== undefined && (typeof notes !== "string" || notes.length > 1000))
+    || !validOptionalText(reporterName, 100)
+    || !validPhone(reporterPhone)
+    || !validOptionalText(reporterAltContact, 120)
+    || contactConsent !== true
   ) {
-    return res.status(400).json({ error: "Missing or invalid report data" });
+    return res.status(400).json({ error: "Add valid contact details and report information" });
   }
 
   try {
@@ -260,20 +403,34 @@ app.post("/reports", reportRateLimit, optionalAuth, async (req, res) => {
       ? `Possible duplicate of report ${duplicate.reportId} (distance ${duplicate.distance})`
       : null;
 
-    const [inserted] = await db("reports").insert({
-      photoUrl,
-      latitude,
-      longitude,
-      tags: JSON.stringify(tags.map((tag) => tag.trim())),
-      notes: stripHtml(notes || ""),
-      reporterKey: key,
-      imageFingerprint: upload.imageFingerprint,
-      duplicateOfReportId: duplicate?.reportId || null,
-      reviewReason,
-      status,
-      userId: req.user?.id || null,
-    }).returning("id");
-    const id = typeof inserted === "object" ? inserted.id : inserted;
+    const id = await db.transaction(async (trx) => {
+      const [inserted] = await trx("reports").insert({
+        photoUrl,
+        latitude,
+        longitude,
+        tags: JSON.stringify(tags.map((tag) => tag.trim())),
+        notes: stripHtml(notes || ""),
+        reporterName: stripHtml(reporterName || req.user?.name || ""),
+        reporterPhone: stripHtml(reporterPhone),
+        reporterAltContact: stripHtml(reporterAltContact || ""),
+        contactConsent: true,
+        lastStatusNote: status === "review" ? "Report is being reviewed for possible duplication." : "Report received.",
+        reporterKey: key,
+        imageFingerprint: upload.imageFingerprint,
+        duplicateOfReportId: duplicate?.reportId || null,
+        reviewReason,
+        status,
+        userId: req.user?.id || null,
+      }).returning("id");
+      const reportId = typeof inserted === "object" ? inserted.id : inserted;
+      await recordReportStatusEvent(trx, {
+        reportId,
+        status,
+        note: status === "review" ? "Report submitted and queued for review." : "Report submitted.",
+        changedBy: req.user?.id || null,
+      });
+      return reportId;
+    });
 
     // Award points for rescue report (authenticated users only)
     if (req.user && status !== "review") {
@@ -294,14 +451,24 @@ app.post("/reports", reportRateLimit, optionalAuth, async (req, res) => {
         "tags",
         "notes",
         "status",
+        "reporterName",
+        "reporterPhone",
+        "reporterAltContact",
+        "lastStatusNote",
         "duplicateOfReportId",
         "reviewReason",
         "createdAt",
+        "updatedAt",
       )
       .first();
+    const events = await db("report_status_events")
+      .where({ reportId: id })
+      .orderBy("createdAt", "asc")
+      .select("id", "status", "note", "createdAt");
     report.tags = JSON.parse(report.tags);
     res.status(201).json({
       ...report,
+      events,
       reviewRequired: status === "review",
       pointsAwarded: req.user && status !== "review" ? 10 : 0,
     });
@@ -321,7 +488,12 @@ if (config.enableReportList) {
       "tags",
       "notes",
       "status",
+      "reporterName",
+      "reporterPhone",
+      "reporterAltContact",
+      "lastStatusNote",
       "createdAt",
+      "updatedAt",
     );
     res.json(reports.map((report) => ({ ...report, tags: JSON.parse(report.tags) })));
   });
@@ -349,7 +521,23 @@ app.get("/moderation/reports", optionalAuth, requireShelter, async (req, res) =>
   }
   const reports = await db("reports")
     .where({ status })
-    .select("id", "photoUrl", "latitude", "longitude", "tags", "notes", "status", "duplicateOfReportId", "reviewReason", "createdAt");
+    .select(
+      "id",
+      "photoUrl",
+      "latitude",
+      "longitude",
+      "tags",
+      "notes",
+      "status",
+      "reporterName",
+      "reporterPhone",
+      "reporterAltContact",
+      "lastStatusNote",
+      "duplicateOfReportId",
+      "reviewReason",
+      "createdAt",
+      "updatedAt",
+    );
   res.json(reports.map((report) => ({ ...report, tags: JSON.parse(report.tags) })));
 });
 

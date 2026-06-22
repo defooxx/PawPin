@@ -31,7 +31,7 @@ export async function uploadReportPhoto(photo) {
   return uploaded.url;
 }
 
-export async function createReport({ photoUrl, location, tags }) {
+export async function createReport({ photoUrl, location, tags, notes, reporterName, reporterPhone, reporterAltContact, contactConsent }) {
   const latitude = Number(location.latitude);
   const longitude = Number(location.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
@@ -45,7 +45,11 @@ export async function createReport({ photoUrl, location, tags }) {
       latitude,
       longitude,
       tags,
-      notes: "Report created from PawPin web app",
+      notes,
+      reporterName,
+      reporterPhone,
+      reporterAltContact,
+      contactConsent,
     }),
   });
   return readResponse(response);
@@ -152,3 +156,11 @@ export async function resolvePin(kind, id) {
   return readResponse(response);
 }
 
+export async function updateRescueStatus(id, status, note = "") {
+  const response = await fetch(`${API_BASE}/map/pins/rescue/${id}/status`, {
+    method: "PATCH",
+    headers: requestHeaders(),
+    body: JSON.stringify({ status, note }),
+  });
+  return readResponse(response);
+}

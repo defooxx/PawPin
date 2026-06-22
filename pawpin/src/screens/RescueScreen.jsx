@@ -1,12 +1,29 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, Building2, Camera, Check, Navigation, PawPrint, Phone, Plus } from "lucide-react";
+import { Bell, Building2, Camera, Check, Navigation, Plus } from "lucide-react";
 import L from "leaflet";
-import { fade, RESCUE_ISSUES, SHELTERS } from "../data.js";
+import { fade, RESCUE_ISSUES } from "../data.js";
 import { LocationChoiceDialog } from "../components/LocationChoiceDialog.jsx";
-import { createReport, uploadReportPhoto, getMapPins, assignPin, unassignPin, resolvePin } from "../services/api.js";
+import { createReport, uploadReportPhoto, getMapPins, assignPin, unassignPin, resolvePin, updateRescueStatus } from "../services/api.js";
 import { getCurrentLocation, stopWatchingLocation, watchCurrentLocation } from "../services/location.js";
 
 const KATHMANDU = [27.7172, 85.324];
+const RESPONDER_ROLES = new Set(["shelter", "vet", "admin"]);
+const STATUS_LABELS = {
+  pending: "Pending Help",
+  review: "Under Review",
+  under_review: "Under Review",
+  assigned: "Assigned",
+  on_the_way: "On the way",
+  rescued: "Rescued",
+  at_vet_or_shelter: "At vet/shelter",
+  closed: "Closed",
+  false: "Marked false",
+  abusive: "Flagged abusive",
+};
+
+function statusLabel(status) {
+  return STATUS_LABELS[status] || status;
+}
 
 const pinIcon = L.divIcon({
   className: "",
@@ -74,6 +91,14 @@ export function RescueScreen({ toast, user }) {
   const [sent, setSent]     = useState(false);
   const [loading, setLoading] = useState(false);
   const [pin, setPin]       = useState(null); // [lat, lng]
+  const [savedReport, setSavedReport] = useState(null);
+  const [contact, setContact] = useState({
+    name: user?.name || "",
+    phone: user?.phoneNumber || "",
+    alt: "",
+    notes: "",
+    consent: false,
+  });
   const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
   const [sharingLocation, setSharingLocation] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -83,6 +108,14 @@ export function RescueScreen({ toast, user }) {
   // Shelter state
   const [reports, setReports] = useState([]);
   const [loadingReports, setLoadingReports] = useState(false);
+
+  useEffect(() => {
+    setContact((current) => ({
+      ...current,
+      name: current.name || user?.name || "",
+      phone: current.phone || user?.phoneNumber || "",
+    }));
+  }, [user]);
 
   const fetchReports = async () => {
     setLoadingReports(true);
@@ -126,10 +159,20 @@ export function RescueScreen({ toast, user }) {
   const handleResolveReport = async (reportId) => {
     try {
       await resolvePin("rescue", reportId);
-      toast("Rescue case marked as resolved! Great job! 🎉");
+      toast("Rescue case closed.");
       fetchReports();
     } catch (err) {
       toast(err.message || "Failed to resolve rescue request");
+    }
+  };
+
+  const handleStatusUpdate = async (reportId, status, note) => {
+    try {
+      const result = await updateRescueStatus(reportId, status, note);
+      toast(`Status updated to ${statusLabel(result.status)}`);
+      fetchReports();
+    } catch (err) {
+      toast(err.message || "Failed to update rescue status");
     }
   };
 
@@ -190,12 +233,25 @@ export function RescueScreen({ toast, user }) {
     if (!photo)   { toast("Add a photo before sending the report"); return; }
     if (!issues.length) { toast("Select at least one issue before sending"); return; }
     if (!pin)     { toast("Tap the map to drop a pin, or use your current location"); return; }
+    if (!contact.name.trim()) { toast("Add your name so responders know who to contact"); return; }
+    if (!/^[+\d\s().-]{7,30}$/.test(contact.phone.trim())) { toast("Add a valid phone number"); return; }
+    if (!contact.consent) { toast("Allow PawPin to share your contact with verified responders"); return; }
 
     setLoading(true);
     try {
       const photoUrl = await uploadReportPhoto(photo);
-      await createReport({ photoUrl, location: { latitude: pin[0], longitude: pin[1] }, tags: issues });
-      toast("Report submitted — help is on the way!");
+      const report = await createReport({
+        photoUrl,
+        location: { latitude: pin[0], longitude: pin[1] },
+        tags: issues,
+        notes: contact.notes || "Report created from PawPin web app",
+        reporterName: contact.name,
+        reporterPhone: contact.phone,
+        reporterAltContact: contact.alt,
+        contactConsent: contact.consent,
+      });
+      setSavedReport(report);
+      toast("Report submitted. Verified responders can now review it.");
       setSent(true);
     } catch (err) {
       console.error(err);
@@ -205,9 +261,17 @@ export function RescueScreen({ toast, user }) {
     }
   };
 
-  const reset = () => { stopSharing(); setSent(false); setPhoto(null); setIssues([]); setPin(null); };
+  const reset = () => {
+    stopSharing();
+    setSent(false);
+    setSavedReport(null);
+    setPhoto(null);
+    setIssues([]);
+    setPin(null);
+    setContact((current) => ({ ...current, alt: "", notes: "", consent: false }));
+  };
 
-  if (user?.role === "shelter") {
+  if (RESPONDER_ROLES.has(user?.role)) {
     return (
       <div style={fade}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
@@ -241,13 +305,13 @@ export function RescueScreen({ toast, user }) {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
                         <span className="pp-fred" style={{ fontWeight: 800, fontSize: 14.5 }}>Report #{report.id}</span>
-                        {report.status === "assigned" ? (
+                        {report.status === "assigned" || report.status === "on_the_way" || report.status === "rescued" || report.status === "at_vet_or_shelter" ? (
                           <span className="pp-pill" style={{ background: isAssignedToMe ? "var(--sage-soft)" : "var(--amber-soft)", color: isAssignedToMe ? "var(--sage)" : "var(--amber-deep)", padding: "2px 8px", fontSize: 11 }}>
-                            {isAssignedToMe ? "Assigned to you" : `Assigned: ${report.assignedUserName}`}
+                            {isAssignedToMe ? statusLabel(report.status) : `Assigned: ${report.assignedUserName}`}
                           </span>
                         ) : (
                           <span className="pp-pill" style={{ background: "var(--sos-soft)", color: "var(--sos)", padding: "2px 8px", fontSize: 11 }}>
-                            Pending Help
+                            {statusLabel(report.status)}
                           </span>
                         )}
                       </div>
@@ -268,6 +332,21 @@ export function RescueScreen({ toast, user }) {
                     </div>
                   )}
 
+                  {(report.reporterName || report.reporterPhone || report.reporterAltContact) && (
+                    <div className="pp-card" style={{ padding: 10, background: "var(--bg)", boxShadow: "none" }}>
+                      <div className="pp-fred" style={{ fontSize: 12, fontWeight: 800 }}>Reporter contact</div>
+                      {report.reporterName && <div className="pp-sub" style={{ fontSize: 12 }}>Name: {report.reporterName}</div>}
+                      {report.reporterPhone && <div className="pp-sub" style={{ fontSize: 12 }}>Phone: {report.reporterPhone}</div>}
+                      {report.reporterAltContact && <div className="pp-sub" style={{ fontSize: 12 }}>Other: {report.reporterAltContact}</div>}
+                    </div>
+                  )}
+
+                  {report.lastStatusNote && (
+                    <div className="pp-sub" style={{ fontSize: 12 }}>
+                      Latest update: {report.lastStatusNote}
+                    </div>
+                  )}
+
                   <div style={{ fontSize: 12, color: "var(--ink-soft)" }}>
                     📍 Coordinates: {Number(report.latitude).toFixed(5)}, {Number(report.longitude).toFixed(5)}
                   </div>
@@ -280,8 +359,23 @@ export function RescueScreen({ toast, user }) {
                     )}
                     {isAssignedToMe && (
                       <>
+                        {report.status === "assigned" && (
+                          <button className="pp-btn pp-btn-amber" style={{ padding: "10px 14px", fontSize: 13, flex: 1 }} onClick={() => handleStatusUpdate(report.id, "on_the_way", "Responder is on the way.")}>
+                            On The Way
+                          </button>
+                        )}
+                        {report.status === "on_the_way" && (
+                          <button className="pp-btn pp-btn-amber" style={{ padding: "10px 14px", fontSize: 13, flex: 1 }} onClick={() => handleStatusUpdate(report.id, "rescued", "Animal has been rescued.")}>
+                            Mark Rescued
+                          </button>
+                        )}
+                        {report.status === "rescued" && (
+                          <button className="pp-btn pp-btn-amber" style={{ padding: "10px 14px", fontSize: 13, flex: 1 }} onClick={() => handleStatusUpdate(report.id, "at_vet_or_shelter", "Animal is now with a vet or shelter.")}>
+                            At Vet/Shelter
+                          </button>
+                        )}
                         <button className="pp-btn pp-btn-sos" style={{ padding: "10px 14px", fontSize: 13, flex: 1 }} onClick={() => handleResolveReport(report.id)}>
-                          Mark as Resolved
+                          Close Case
                         </button>
                         <button className="pp-btn pp-btn-ghost" style={{ padding: "10px 14px", fontSize: 13, border: "1.5px solid var(--line)" }} onClick={() => handleUnassignReport(report.id)}>
                           Cancel
@@ -303,20 +397,20 @@ export function RescueScreen({ toast, user }) {
       <div style={fade}>
         <div className="pp-result" style={{ background: "linear-gradient(135deg,#48B08F,var(--sage))", marginTop: 6 }}>
           <Check size={30} />
-          <div className="pp-fred" style={{ fontSize: 20, fontWeight: 600, marginTop: 8 }}>Help is on the way</div>
-          <div style={{ fontSize: 13.5, opacity: .95, marginTop: 4 }}>3 shelters near the pin were notified. Sunny Tails Rescue accepted — ETA ~12 min.</div>
+          <div className="pp-fred" style={{ fontSize: 20, fontWeight: 600, marginTop: 8 }}>Report #{savedReport?.id || ""} submitted</div>
+          <div style={{ fontSize: 13.5, opacity: .95, marginTop: 4 }}>
+            Current status: {statusLabel(savedReport?.status || "pending")}. Verified shelters, vets, and admins can review and update this case.
+          </div>
         </div>
-        <h2 className="pp-h2" style={{ margin: "20px 0 10px" }}>Responding</h2>
-        {SHELTERS.map((shelter, i) => (
-          <div key={shelter.name} className="pp-listcard" style={{ marginBottom: 10 }}>
-            <div className="pp-thumb" style={{ background: i === 0 ? "var(--sage-soft)" : "var(--bg)", color: "var(--sage)" }}><Building2 size={22} /></div>
+        <h2 className="pp-h2" style={{ margin: "20px 0 10px" }}>Status timeline</h2>
+        {(savedReport?.events || []).map((event) => (
+          <div key={event.id} className="pp-listcard" style={{ marginBottom: 10 }}>
+            <div className="pp-thumb" style={{ background: "var(--sage-soft)", color: "var(--sage)" }}><Building2 size={22} /></div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 14 }}>{shelter.name}</div>
-              <div className="pp-sub" style={{ fontSize: 12 }}>{shelter.dist} · {shelter.note}</div>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>{statusLabel(event.status)}</div>
+              <div className="pp-sub" style={{ fontSize: 12 }}>{event.note || "Status updated"}</div>
+              <div className="pp-sub" style={{ fontSize: 11 }}>{new Date(event.createdAt).toLocaleString()}</div>
             </div>
-            {i === 0
-              ? <span className="pp-pill" style={{ background: "var(--sage-soft)", color: "var(--sage)" }}>On the way</span>
-              : <button className="pp-icobtn" aria-label={`Call ${shelter.name}`}><Phone size={17} color="var(--sage)" /></button>}
           </div>
         ))}
         <button className="pp-btn pp-btn-ghost" style={{ marginTop: 6 }} onClick={reset}>Report another animal</button>
@@ -370,6 +464,16 @@ export function RescueScreen({ toast, user }) {
       </button>
       {sharingLocation && <p className="pp-location-sharing">Location is updating while this screen is open.</p>}
       <LocationChoiceDialog open={locationChoiceOpen} onClose={() => setLocationChoiceOpen(false)} onChoose={useLocation} />
+
+      <div className="pp-fred" style={{ fontWeight: 600, margin: "18px 0 8px" }}>4 · Contact details</div>
+      <label className="pp-field"><span>Your name</span><input value={contact.name} onChange={(event) => setContact({ ...contact, name: event.target.value })} placeholder="Name responders can use" /></label>
+      <label className="pp-field"><span>Phone number</span><input value={contact.phone} onChange={(event) => setContact({ ...contact, phone: event.target.value })} placeholder="+977 98..." inputMode="tel" /></label>
+      <label className="pp-field"><span>WhatsApp, Viber, or alternate contact</span><input value={contact.alt} onChange={(event) => setContact({ ...contact, alt: event.target.value })} placeholder="Optional" /></label>
+      <label className="pp-field"><span>Extra notes for responders</span><textarea value={contact.notes} onChange={(event) => setContact({ ...contact, notes: event.target.value })} placeholder="Landmark, animal behavior, visible injury..." rows={3} /></label>
+      <label style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: 12.5, color: "var(--ink-soft)", marginTop: 8 }}>
+        <input type="checkbox" checked={contact.consent} onChange={(event) => setContact({ ...contact, consent: event.target.checked })} style={{ marginTop: 2 }} />
+        Share my contact details with verified shelters, vets, admins, or assigned responders for this rescue.
+      </label>
 
       <button className="pp-btn pp-btn-sos" style={{ marginTop: 14, opacity: loading ? .65 : 1 }} disabled={loading} onClick={handleSubmit}>
         <Bell size={18} /> {loading ? "Sending report..." : "Alert nearest shelter"}

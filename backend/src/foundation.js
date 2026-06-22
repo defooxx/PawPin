@@ -444,16 +444,40 @@ router.post("/auth/firebase-phone", authRateLimit, async (req, res) => {
 
 router.get("/me", requireAuth, async (req, res) => {
   const reports = await db("reports")
-    .where({ userId: req.user.id })
-    .select("id", "photoUrl", "tags", "status", "createdAt")
-    .orderBy("createdAt", "desc");
+    .leftJoin("users as assigned", "reports.assignedUserId", "assigned.id")
+    .where("reports.userId", req.user.id)
+    .select(
+      "reports.id",
+      "reports.photoUrl",
+      "reports.tags",
+      "reports.status",
+      "reports.notes",
+      "reports.lastStatusNote",
+      "reports.createdAt",
+      "reports.updatedAt",
+      "reports.assignedUserId",
+      "assigned.name as assignedUserName",
+    )
+    .orderBy("reports.createdAt", "desc");
+  const reportIds = reports.map((report) => report.id);
+  const events = reportIds.length
+    ? await db("report_status_events")
+      .whereIn("reportId", reportIds)
+      .orderBy("createdAt", "asc")
+      .select("id", "reportId", "status", "note", "createdAt")
+    : [];
+  const eventsByReport = events.reduce((acc, event) => {
+    if (!acc[event.reportId]) acc[event.reportId] = [];
+    acc[event.reportId].push(event);
+    return acc;
+  }, {});
   const application = await db("organization_applications")
     .where({ userId: req.user.id })
     .orderBy("createdAt", "desc")
     .first();
   return res.json({
     user: publicUser(req.user),
-    reports: reports.map((report) => ({ ...report, tags: JSON.parse(report.tags) })),
+    reports: reports.map((report) => ({ ...report, tags: JSON.parse(report.tags), events: eventsByReport[report.id] || [] })),
     application: application ? { ...application, documentUrls: JSON.parse(application.documentUrls) } : null,
   });
 });

@@ -286,8 +286,9 @@ button:disabled { cursor: not-allowed; }
 .pp-avatar { align-items: center; background: var(--amber-soft); border-radius: 50%; color: var(--amber-deep); display: flex; height: 68px; justify-content: center; overflow: hidden; width: 68px; }
 .pp-avatar img { height: 100%; object-fit: cover; width: 100%; }
 .pp-field { color: var(--ink-soft); display: block; font-size: 12px; font-weight: 700; margin-bottom: 11px; }
-.pp-field input, .pp-field select { background: var(--bg); border: 1px solid var(--line); border-radius: 13px; color: var(--ink); display: block; margin-top: 5px; outline: none; padding: 12px 13px; width: 100%; }
-.pp-field input:focus, .pp-field select:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
+.pp-field input, .pp-field select, .pp-field textarea { background: var(--bg); border: 1px solid var(--line); border-radius: 13px; color: var(--ink); display: block; margin-top: 5px; outline: none; padding: 12px 13px; width: 100%; }
+.pp-field textarea { resize: vertical; }
+.pp-field input:focus, .pp-field select:focus, .pp-field textarea:focus { border-color: var(--amber); box-shadow: 0 0 0 3px var(--amber-soft); }
 .pp-password-wrap { display: block; position: relative; }
 .pp-password-wrap input { padding-right: 42px; }
 .pp-eye-btn { align-items: center; background: none; border: none; color: var(--ink-soft); cursor: pointer; display: flex; height: 40px; justify-content: center; position: absolute; right: 4px; top: 6px; width: 40px; }

@@ -49,7 +49,7 @@ export async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
-async function resolveUser(token) {
+export async function resolveUser(token) {
   const payload = jwt.verify(token, config.authJwtSecret);
   const user = await db("users").where({ id: Number(payload.sub) }).first();
   if (!user || user.status !== "active") return null;

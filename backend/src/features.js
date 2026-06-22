@@ -9,6 +9,8 @@ import db from "./db.js";
 import { optionalAuth, requireAuth, requireRole } from "./auth.js";
 
 const router = express.Router();
+const rescueResponderRoles = new Set(["shelter", "vet", "admin"]);
+const rescueStatuses = new Set(["pending", "under_review", "assigned", "on_the_way", "rescued", "at_vet_or_shelter", "closed"]);
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -19,6 +21,19 @@ function stripHtml(value) {
 
 function validCoordinate(value, min, max) {
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+function canRespondToRescue(user) {
+  return Boolean(user && rescueResponderRoles.has(user.role));
+}
+
+async function addReportStatusEvent(trx, { reportId, status, note = "", changedBy = null }) {
+  await trx("report_status_events").insert({
+    reportId,
+    status,
+    note: stripHtml(note || ""),
+    changedBy,
+  });
 }
 
 const postRateLimit = rateLimit({
@@ -259,10 +274,11 @@ router.get("/map/pins", optionalAuth, async (req, res) => {
   const [reports, lostPosts] = await Promise.all([
     db("reports as r")
       .leftJoin("users as u", "r.assignedUserId", "u.id")
-      .whereIn("r.status", ["pending", "review", "assigned"])
+      .whereIn("r.status", ["pending", "review", "under_review", "assigned", "on_the_way", "rescued", "at_vet_or_shelter"])
       .select(
         "r.id", "r.latitude", "r.longitude", "r.tags", "r.status", "r.createdAt",
-        "r.userId", "r.assignedUserId", "u.name as assignedUserName", "r.photoUrl", "r.notes"
+        "r.updatedAt", "r.userId", "r.assignedUserId", "u.name as assignedUserName",
+        "r.photoUrl", "r.notes", "r.reporterName", "r.reporterPhone", "r.reporterAltContact", "r.lastStatusNote"
       )
       .orderBy("r.createdAt", "desc")
       .limit(100),
@@ -281,12 +297,19 @@ router.get("/map/pins", optionalAuth, async (req, res) => {
 
   res.json([
     ...reports.map((report) => {
-      const isOwnerOrAssigned = req.user && (report.userId === req.user.id || report.assignedUserId === req.user.id);
+      const canSeePrivateRescueDetails = req.user && (
+        report.userId === req.user.id
+        || report.assignedUserId === req.user.id
+        || canRespondToRescue(req.user)
+      );
       return {
         ...report,
         kind: "rescue",
-        latitude: isOwnerOrAssigned ? Number(report.latitude) : Number(Number(report.latitude).toFixed(3)),
-        longitude: isOwnerOrAssigned ? Number(report.longitude) : Number(Number(report.longitude).toFixed(3)),
+        latitude: canSeePrivateRescueDetails ? Number(report.latitude) : Number(Number(report.latitude).toFixed(3)),
+        longitude: canSeePrivateRescueDetails ? Number(report.longitude) : Number(Number(report.longitude).toFixed(3)),
+        reporterName: canSeePrivateRescueDetails ? report.reporterName : "",
+        reporterPhone: canSeePrivateRescueDetails ? report.reporterPhone : "",
+        reporterAltContact: canSeePrivateRescueDetails ? report.reporterAltContact : "",
         tags: JSON.parse(report.tags),
       };
     }),
@@ -315,13 +338,27 @@ router.post("/map/pins/:kind/:id/assign", requireAuth, async (req, res) => {
 
   try {
     if (kind === "rescue") {
+      if (!canRespondToRescue(req.user)) {
+        return res.status(403).json({ error: "Only verified shelters, vets, or admins can accept rescue cases" });
+      }
       const report = await db("reports").where({ id: pinId }).first();
       if (!report) return res.status(404).json({ error: "Rescue report not found" });
       if (report.assignedUserId) return res.status(400).json({ error: "Rescue report is already assigned" });
+      if (report.status !== "pending") return res.status(400).json({ error: "Rescue report must clear review before assignment" });
 
-      await db("reports").where({ id: pinId }).update({
-        assignedUserId: req.user.id,
-        status: "assigned",
+      await db.transaction(async (trx) => {
+        await trx("reports").where({ id: pinId }).update({
+          assignedUserId: req.user.id,
+          status: "assigned",
+          lastStatusNote: `${req.user.name} accepted this rescue case.`,
+          updatedAt: trx.fn.now(),
+        });
+        await addReportStatusEvent(trx, {
+          reportId: pinId,
+          status: "assigned",
+          note: `${req.user.name} accepted this rescue case.`,
+          changedBy: req.user.id,
+        });
       });
 
       const io = req.app.get("io");
@@ -384,9 +421,19 @@ router.post("/map/pins/:kind/:id/unassign", requireAuth, async (req, res) => {
         return res.status(403).json({ error: "You are not assigned to this rescue" });
       }
 
-      await db("reports").where({ id: pinId }).update({
-        assignedUserId: null,
-        status: "pending",
+      await db.transaction(async (trx) => {
+        await trx("reports").where({ id: pinId }).update({
+          assignedUserId: null,
+          status: "pending",
+          lastStatusNote: "Responder cancelled the assignment. Waiting for another responder.",
+          updatedAt: trx.fn.now(),
+        });
+        await addReportStatusEvent(trx, {
+          reportId: pinId,
+          status: "pending",
+          note: "Responder cancelled the assignment.",
+          changedBy: req.user.id,
+        });
       });
 
       const io = req.app.get("io");
@@ -447,17 +494,26 @@ router.post("/map/pins/:kind/:id/resolve", requireAuth, async (req, res) => {
         return res.status(403).json({ error: "Only the assigned responder or an admin can resolve the case" });
       }
 
-      await db("reports").where({ id: pinId }).update({
-        status: "resolved",
-        updatedAt: db.fn.now(),
+      await db.transaction(async (trx) => {
+        await trx("reports").where({ id: pinId }).update({
+          status: "closed",
+          lastStatusNote: "Rescue case closed.",
+          updatedAt: trx.fn.now(),
+        });
+        await addReportStatusEvent(trx, {
+          reportId: pinId,
+          status: "closed",
+          note: "Rescue case closed.",
+          changedBy: req.user.id,
+        });
       });
 
       const io = req.app.get("io");
       if (io) {
-        io.emit("pin-resolved", { id: pinId, kind: "rescue", status: "resolved" });
+        io.emit("pin-resolved", { id: pinId, kind: "rescue", status: "closed" });
       }
 
-      return res.json({ success: true, status: "resolved" });
+      return res.json({ success: true, status: "closed" });
     } else {
       const post = await db("lost_posts").where({ id: pinId }).first();
       if (!post) return res.status(404).json({ error: "Lost animal post not found" });
@@ -481,6 +537,55 @@ router.post("/map/pins/:kind/:id/resolve", requireAuth, async (req, res) => {
     console.error("Resolve failed:", error.message);
     res.status(500).json({ error: "Unable to resolve case" });
   }
+});
+
+/**
+ * PATCH /map/pins/rescue/:id/status
+ * Let the assigned responder or admin move a rescue through the real workflow.
+ */
+router.patch("/map/pins/rescue/:id/status", requireAuth, async (req, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  const { status, note = "" } = req.body || {};
+  if (!Number.isSafeInteger(id) || !rescueStatuses.has(status) || typeof note !== "string" || note.length > 1000) {
+    return res.status(400).json({ error: "Invalid rescue status update" });
+  }
+
+  const report = await db("reports").where({ id }).first();
+  if (!report) return res.status(404).json({ error: "Rescue report not found" });
+  if (report.assignedUserId !== req.user.id && req.user.role !== "admin") {
+    return res.status(403).json({ error: "Only the assigned responder or an admin can update this rescue" });
+  }
+  if (status === "assigned" && !report.assignedUserId) {
+    return res.status(400).json({ error: "Assign the rescue before updating it" });
+  }
+
+  const nextNote = note.trim() || {
+    assigned: "Rescue has been assigned.",
+    on_the_way: "Responder is on the way.",
+    rescued: "Animal has been rescued.",
+    at_vet_or_shelter: "Animal is now with a vet or shelter.",
+    closed: "Rescue case closed.",
+    pending: "Waiting for responder.",
+    under_review: "Report is under review.",
+  }[status] || "Status updated.";
+
+  await db.transaction(async (trx) => {
+    await trx("reports").where({ id }).update({
+      status,
+      lastStatusNote: stripHtml(nextNote),
+      updatedAt: trx.fn.now(),
+    });
+    await addReportStatusEvent(trx, {
+      reportId: id,
+      status,
+      note: nextNote,
+      changedBy: req.user.id,
+    });
+  });
+
+  const io = req.app.get("io");
+  if (io) io.emit("pin-status-updated", { id, kind: "rescue", status, lastStatusNote: stripHtml(nextNote) });
+  res.json({ success: true, id, status, lastStatusNote: stripHtml(nextNote) });
 });
 
 /**
