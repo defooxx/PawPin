@@ -1154,6 +1154,15 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Check if token query param is present (SSO from main login)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenParam = urlParams.get("token");
+    if (tokenParam) {
+      localStorage.setItem(TOKEN_KEY, tokenParam);
+      // clean URL query parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     const token = getToken();
     if (!token) {
       setLoading(false);

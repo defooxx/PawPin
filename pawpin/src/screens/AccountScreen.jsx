@@ -17,6 +17,7 @@ import {
   updateProfile,
   uploadApplicationDocument,
   uploadProfilePhoto,
+  getAuthToken,
 } from "../services/auth.js";
 import { auth, isFirebaseConfigured, RecaptchaVerifier, signInWithPhoneNumber } from "../services/firebase.js";
 import { fade } from "../data.js";
@@ -720,6 +721,29 @@ export function AccountScreen({ data, onBack, onAuthenticated, onLogout, refresh
       {data?.application
         ? <div className="pp-card" style={{ marginTop: 18 }}><b>{data.application.organizationName}</b><p className="pp-sub">Application status: {data.application.status}</p></div>
         : profile.role === "user" && <div style={{ marginTop: 18 }}><ApplicationForm refresh={refresh} toast={toast} defaultType="shelter" /></div>}
+      {profile.role === "admin" && (
+        <div className="pp-card" style={{ marginTop: 18, border: "2.5px solid var(--amber)", background: "var(--amber-soft)" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div className="pp-auth-icon amber" style={{ width: 40, height: 40, fontSize: 18, display: "grid", placeItems: "center", flexShrink: 0 }}><ShieldCheck size={20} /></div>
+            <div>
+              <b style={{ color: "var(--ink)", fontSize: 14 }}>Administrator Portal</b>
+              <div className="pp-sub" style={{ fontSize: 11.5 }}>Access the premium dashboard console to manage users, reports, points, and shelters.</div>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            className="pp-btn pp-btn-amber" 
+            style={{ marginTop: 12, width: "100%", fontWeight: 700 }}
+            onClick={() => {
+              const token = getAuthToken();
+              const adminUrl = import.meta.env.VITE_ADMIN_DASHBOARD_URL || "http://localhost:5174";
+              window.open(`${adminUrl}?token=${token}`, "_blank");
+            }}
+          >
+            🛡️ Open Admin Dashboard Console
+          </button>
+        </div>
+      )}
       {profile.role === "admin" && <AdminPanel toast={toast} />}
     </div>
   );
